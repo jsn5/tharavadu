@@ -1,0 +1,1478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scene Editor - Meenmutty Mala</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #1a1a1a; display: flex; }
+        canvas { display: block; flex: 1; }
+        #panel {
+            width: 280px; background: #222; color: #ccc; padding: 12px;
+            overflow-y: auto; font-size: 13px; border-left: 1px solid #444;
+            user-select: none;
+        }
+        #panel h2 { font-size: 15px; color: #8cf; margin-bottom: 8px; }
+        #panel h3 { font-size: 12px; color: #888; margin: 10px 0 4px; border-top: 1px solid #333; padding-top: 6px; }
+        #objectList { max-height: 220px; overflow-y: auto; margin-bottom: 8px; }
+        .obj-item {
+            padding: 3px 8px; cursor: pointer; border-radius: 3px; margin: 1px 0;
+            display: flex; justify-content: space-between; font-size: 12px;
+        }
+        .obj-item:hover { background: #333; }
+        .obj-item.selected { background: #2a4a6a; color: #fff; }
+        .obj-item .coords { font-size: 10px; color: #666; }
+        #transformPanel { font-size: 12px; }
+        #selectedName { color: #8cf; font-weight: 600; margin-bottom: 6px; }
+        .val-row { display: flex; align-items: center; gap: 4px; margin: 2px 0; }
+        .val-row label { width: 12px; color: #888; text-align: center; font-size: 11px; }
+        .val-row input {
+            width: 70px; padding: 2px 4px; background: #333; color: #eee;
+            border: 1px solid #555; border-radius: 3px; font-size: 11px;
+        }
+        .mode-btns { display: flex; gap: 4px; margin: 8px 0; }
+        .mode-btn {
+            flex: 1; padding: 5px; text-align: center; cursor: pointer;
+            border-radius: 3px; border: 1px solid #555; font-size: 11px; background: #333;
+        }
+        .mode-btn.active, .brush-btn.active { background: #2a5a8a; border-color: #4a8aca; color: #fff; }
+        .mode-btn:hover, .brush-btn:hover { background: #3a3a3a; }
+        .brush-btn {
+            flex: 1; padding: 4px; text-align: center; cursor: pointer;
+            border-radius: 3px; border: 1px solid #555; font-size: 10px; background: #333;
+        }
+        #terrainToggle.active { background: #5a6a2a; border-color: #8aaa4a; }
+        button {
+            margin-top: 6px; padding: 5px 10px; background: #3a6a3a; color: #fff;
+            border: none; border-radius: 3px; cursor: pointer; font-size: 12px; width: 100%;
+        }
+        button:hover { background: #4a8a4a; }
+        #launchBtn { background: #2a5a8a; margin-top: 10px; font-size: 13px; padding: 8px; }
+        #launchBtn:hover { background: #3a7aba; }
+        #status { color: #6a6; font-size: 11px; margin-top: 4px; min-height: 16px; }
+        .help { color: #666; font-size: 10px; margin-top: 4px; line-height: 1.4; }
+    </style>
+</head>
+<body>
+<div id="panel">
+    <h2>Scene Editor</h2>
+    <div class="help">Click object to select. Drag gizmo to move/scale/rotate.</div>
+
+    <h3>Gizmo Mode</h3>
+    <div class="mode-btns">
+        <div class="mode-btn active" data-mode="translate">Move (G)</div>
+        <div class="mode-btn" data-mode="rotate">Rotate (R)</div>
+        <div class="mode-btn" data-mode="scale">Scale (S)</div>
+    </div>
+
+    <h3>Objects</h3>
+    <div id="objectList"></div>
+
+    <div id="transformPanel" style="display:none">
+        <h3>Transform</h3>
+        <div id="selectedName"></div>
+        <label style="color:#888;font-size:11px;margin:4px 0 1px">Position</label>
+        <div class="val-row"><label>X</label><input type="number" id="px" step="0.5"><label>Y</label><input type="number" id="py" step="0.5"><label>Z</label><input type="number" id="pz" step="0.5"></div>
+        <label style="color:#888;font-size:11px;margin:4px 0 1px">Scale (uniform)</label>
+        <div class="val-row"><label>S</label><input type="number" id="su" step="0.01"></div>
+        <input type="hidden" id="sx"><input type="hidden" id="sy"><input type="hidden" id="sz">
+        <label style="color:#888;font-size:11px;margin:4px 0 1px">Rotation Y</label>
+        <div class="val-row"><label>Y</label><input type="number" id="ry" step="0.1"></div>
+        <button id="snapBtn">Snap to Ground</button>
+    </div>
+    <div id="noSelection" style="color:#555;font-style:italic;font-size:12px">No object selected</div>
+
+    <h3>Terrain Sculpt</h3>
+    <div class="mode-btns">
+        <div class="mode-btn" id="terrainToggle">Enable Terrain Brush (T)</div>
+    </div>
+    <div id="terrainControls" style="display:none">
+        <label style="color:#888;font-size:11px;margin:4px 0 1px">Brush Mode</label>
+        <div class="mode-btns">
+            <div class="brush-btn active" data-brush="raise">Raise</div>
+            <div class="brush-btn" data-brush="lower">Lower</div>
+            <div class="brush-btn" data-brush="flatten">Flatten</div>
+            <div class="brush-btn" data-brush="smooth">Smooth</div>
+        </div>
+        <label style="color:#888;font-size:11px;margin:4px 0 1px">Radius: <span id="radiusVal">5</span></label>
+        <input type="range" id="brushRadius" min="1" max="20" value="5" step="0.5" style="width:100%">
+        <label style="color:#888;font-size:11px;margin:4px 0 1px">Strength: <span id="strengthVal">0.5</span></label>
+        <input type="range" id="brushStrength" min="0.05" max="2" value="0.5" step="0.05" style="width:100%">
+        <button id="resetTerrainBtn" style="background:#6a3a3a">Reset Terrain</button>
+    </div>
+
+    <h3>Actions</h3>
+    <button id="exportBtn">Export Layout JSON</button>
+    <button id="launchBtn">Launch FPV Mode</button>
+    <div id="status"></div>
+    <div class="help" style="margin-top:8px">
+        G = Move | R = Rotate | S = Scale | T = Terrain<br>
+        Ctrl+Z = Undo | Ctrl+Y = Redo<br>
+        Click+drag terrain to sculpt | Shift = Lower
+    </div>
+</div>
+
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/"
+    }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+
+// ============================================================
+// SCENE
+// ============================================================
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x81908a, 25, 140);
+scene.background = new THREE.Color(0x81908a);
+
+const canvas = document.createElement('canvas');
+document.body.insertBefore(canvas, document.getElementById('panel'));
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.75;
+
+const camera = new THREE.PerspectiveCamera(60, 1, 0.3, 600);
+camera.position.set(25, 18, 30);
+
+// Orbit controls
+const orbit = new OrbitControls(camera, renderer.domElement);
+orbit.target.set(0, 2, 0);
+orbit.enableDamping = true;
+orbit.dampingFactor = 0.08;
+
+// Transform gizmo
+const gizmo = new TransformControls(camera, renderer.domElement);
+gizmo.addEventListener('dragging-changed', e => {
+    orbit.enabled = !e.value;
+    if (e.value && selectedId) pushUndo(); // save state before drag starts
+});
+gizmo.addEventListener('objectChange', () => { if (selectedId) updatePanelFromObject(); });
+// Don't add gizmo to scene yet — added only when an object is selected
+
+// Force uniform scaling (no per-axis)
+gizmo.addEventListener('mouseDown', () => {
+    if (gizmo.mode === 'scale') gizmo.axis = 'XYZE'; // uniform
+});
+
+// ============================================================
+// UNDO / REDO
+// ============================================================
+const undoStack = [];
+const redoStack = [];
+const MAX_UNDO = 50;
+
+function captureState() {
+    const state = { objects: {}, terrain: { ...terrainDeltas } };
+    for (const [id, o] of Object.entries(editableObjects)) {
+        state.objects[id] = {
+            px: o.position.x, py: o.position.y, pz: o.position.z,
+            sx: o.scale.x, sy: o.scale.y, sz: o.scale.z,
+            ry: o.rotation.y
+        };
+    }
+    return state;
+}
+
+function applyState(state) {
+    // Restore objects
+    for (const [id, s] of Object.entries(state.objects)) {
+        const o = editableObjects[id];
+        if (!o) continue;
+        o.position.set(s.px, s.py, s.pz);
+        o.scale.set(s.sx, s.sy, s.sz);
+        o.rotation.y = s.ry;
+    }
+    // Restore terrain: revert current deltas then apply saved ones
+    for (const [idx, dy] of Object.entries(terrainDeltas)) {
+        const i = parseInt(idx);
+        tPos.setY(i, tPos.getY(i) - dy);
+    }
+    // Clear and apply saved deltas
+    for (const k in terrainDeltas) delete terrainDeltas[k];
+    if (state.terrain) {
+        for (const [idx, dy] of Object.entries(state.terrain)) {
+            const i = parseInt(idx);
+            terrainDeltas[i] = dy;
+            tPos.setY(i, tPos.getY(i) + dy);
+        }
+    }
+    tPos.needsUpdate = true;
+    tGeo.computeVertexNormals();
+    if (selectedId) updatePanelFromObject();
+    document.getElementById('status').textContent = 'Undo/Redo applied';
+}
+
+function pushUndo() {
+    undoStack.push(captureState());
+    if (undoStack.length > MAX_UNDO) undoStack.shift();
+    redoStack.length = 0; // clear redo on new action
+}
+
+function undo() {
+    if (undoStack.length === 0) return;
+    redoStack.push(captureState());
+    applyState(undoStack.pop());
+}
+
+function redo() {
+    if (redoStack.length === 0) return;
+    undoStack.push(captureState());
+    applyState(redoStack.pop());
+}
+
+// Lighting
+scene.add(new THREE.AmbientLight(0x404840, 0.2));
+const sun = new THREE.DirectionalLight(0xFFF3E0, 1.0);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -80, right: 80, top: 80, bottom: -80, far: 180 });
+sun.position.set(25, 45, 15);
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x8090A0, 0.15).translateX(-20).translateY(15).translateZ(-10));
+scene.add(new THREE.HemisphereLight(0x88998a, 0x3a2a1a, 0.5));
+
+// ============================================================
+// TERRAIN (shared functions)
+// ============================================================
+function hash2D(x, z) { let n = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return n - Math.floor(n); }
+function smoothNoise(x, z) {
+    const ix = Math.floor(x), iz = Math.floor(z), fx = x - ix, fz = z - iz;
+    const ux = fx * fx * (3 - 2 * fx), uz = fz * fz * (3 - 2 * fz);
+    const a = hash2D(ix, iz), b = hash2D(ix + 1, iz), c = hash2D(ix, iz + 1), d = hash2D(ix + 1, iz + 1);
+    return a + (b - a) * ux + (c - a) * uz + (a - b - c + d) * ux * uz;
+}
+function fbm(x, z, oct = 4) {
+    let v = 0, a = 1, f = 1, t = 0;
+    for (let i = 0; i < oct; i++) { v += a * smoothNoise(x * f, z * f); t += a; a *= 0.5; f *= 2; }
+    return v / t;
+}
+function clamp(v, mn, mx) { return Math.max(mn, Math.min(mx, v)); }
+function smoothstep(e0, e1, x) { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function clearingMask(x, z) { return 1 - smoothstep(12, 32, Math.hypot(x * 0.85, z + 2)); }
+const HOUSE_FLOOR = 1.5;
+function getTerrainY(x, z) {
+    const bn = Math.sin(x*0.09)*0.55+Math.cos(z*0.12)*0.38+Math.sin((x+z)*0.08)*0.45+Math.cos((x-z)*0.06)*0.35;
+    let y = bn*0.45;
+    y = lerp(y, HOUSE_FLOOR, clearingMask(x, z));
+    y += smoothstep(10,18,x)*2.5+smoothstep(22,32,x)*2.0+smoothstep(36,48,x)*1.5;
+    y -= smoothstep(18,32,-x)*2.2+smoothstep(34,50,-x)*1.8+smoothstep(52,68,-x)*1.2;
+    y = lerp(y, HOUSE_FLOOR-0.3, (1-smoothstep(5,30,Math.hypot(x*0.85,z+12)))*0.6);
+    y -= smoothstep(24,65,-x)*smoothstep(-20,24,z+8)*2.5;
+    y += smoothstep(16,45,z)*1.2;
+    y += (fbm(x*0.04,z*0.04)-0.5)*2.0+(fbm(x*0.1+50,z*0.1+50)-0.5)*0.8;
+    return y;
+}
+function placeOnTerrain(obj, x, z, yOff = 0) { obj.position.set(x, getTerrainY(x, z) + yOff, z); }
+
+// Terrain mesh
+const tGeo = new THREE.PlaneGeometry(180, 180, 160, 160);
+tGeo.rotateX(-Math.PI / 2);
+const tPos = tGeo.attributes.position;
+const tCols = new Float32Array(tPos.count * 3);
+for (let i = 0; i < tPos.count; i++) {
+    const x = tPos.getX(i), z = tPos.getZ(i);
+    tPos.setY(i, getTerrainY(x, z));
+    const n = hash2D(x*0.08+200, z*0.08+200);
+    tCols[i*3]=0.3+n*0.06; tCols[i*3+1]=0.42+n*0.1; tCols[i*3+2]=0.18+n*0.04;
+}
+tGeo.setAttribute('color', new THREE.BufferAttribute(tCols, 3));
+tGeo.computeVertexNormals();
+const terrainMesh = new THREE.Mesh(tGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }));
+terrainMesh.receiveShadow = true;
+scene.add(terrainMesh);
+
+// Terrain height deltas (sparse: vertexIndex → deltaY)
+const terrainDeltas = {};
+// Load saved terrain edits
+try {
+    const saved = JSON.parse(localStorage.getItem('terrainDeltas'));
+    if (saved) {
+        for (const [idx, dy] of Object.entries(saved)) {
+            const i = parseInt(idx);
+            terrainDeltas[i] = dy;
+            tPos.setY(i, tPos.getY(i) + dy);
+        }
+        tGeo.computeVertexNormals();
+        tPos.needsUpdate = true;
+        console.log('Loaded terrain edits:', Object.keys(saved).length, 'vertices');
+    }
+} catch {}
+
+// Brush cursor (ring on terrain)
+const cursorGeo = new THREE.RingGeometry(0.9, 1, 32);
+cursorGeo.rotateX(-Math.PI / 2);
+const cursorMat = new THREE.MeshBasicMaterial({ color: 0x44ff44, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+const brushCursor = new THREE.Mesh(cursorGeo, cursorMat);
+brushCursor.visible = false;
+scene.add(brushCursor);
+
+// Grid
+const grid = new THREE.GridHelper(100, 50, 0x444444, 0x333333);
+grid.position.y = 0.05; scene.add(grid);
+
+// ============================================================
+// KERALA HOUSE (procedural, from index.html)
+// ============================================================
+function createKeralaHouse() {
+// ── Materials ──
+const whitePlaster = new THREE.MeshStandardMaterial({ color: 0xf5f0e8, roughness: 0.85 });
+const concrete = new THREE.MeshStandardMaterial({ color: 0xb0aaa0, roughness: 0.9 });
+const concreteDark = new THREE.MeshStandardMaterial({ color: 0x908880, roughness: 0.95 });
+const woodDoor = new THREE.MeshStandardMaterial({ color: 0x5c3a1e, roughness: 0.6, metalness: 0.05 });
+const woodWindow = new THREE.MeshStandardMaterial({ color: 0xb07030, roughness: 0.5, metalness: 0.05 });
+const glassMat = new THREE.MeshStandardMaterial({ color: 0xc8dce8, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.4 });
+const roofMat = new THREE.MeshStandardMaterial({ color: 0xe8e2d8, roughness: 0.7 });
+const frameMat = new THREE.MeshStandardMaterial({ color: 0x3a2010, roughness: 0.6 });
+const floorTile = new THREE.MeshStandardMaterial({ color: 0xc4a882, roughness: 0.7 });
+const storageShadow = new THREE.MeshStandardMaterial({ color: 0x3a3530, roughness: 1.0 }); // dark recess
+
+// Brick texture
+const brickCanvas = document.createElement('canvas');
+brickCanvas.width = 256; brickCanvas.height = 256;
+const bCtx = brickCanvas.getContext('2d');
+bCtx.fillStyle = '#c45a3a';
+bCtx.fillRect(0, 0, 256, 256);
+for (let row = 0; row < 16; row++) {
+  for (let col = 0; col < 8; col++) {
+    const x = col * 32 + (row % 2 === 0 ? 0 : 16);
+    const y = row * 16;
+    bCtx.fillStyle = `rgb(${170+Math.random()*40},${70+Math.random()*30},${40+Math.random()*20})`;
+    bCtx.fillRect(x + 1, y + 1, 30, 14);
+  }
+}
+const brickTex = new THREE.CanvasTexture(brickCanvas);
+brickTex.wrapS = brickTex.wrapT = THREE.RepeatWrapping;
+const brickMat = new THREE.MeshStandardMaterial({ map: brickTex, roughness: 0.85 });
+
+// ── Helpers ──
+function box(w, h, d, mat) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  m.castShadow = true; m.receiveShadow = true;
+  return m;
+}
+function posBox(w, h, d, mat, x, y, z) {
+  const m = box(w, h, d, mat); m.position.set(x, y, z); return m;
+}
+
+const house = new THREE.Group();
+
+// ══════════════════════════════════════════
+// DIMENSIONS
+// ══════════════════════════════════════════
+// Coordinate system: +Z = front, +X = right when facing house
+const floorH = 0.8;       // plinth/platform height
+const wallH = 2.8;        // wall height above platform
+const wallT = 0.15;       // wall thickness
+const mainW = 7.0;        // main building width
+const mainD = 9.0;        // main building depth
+const storeW = 2.0;       // storeroom width
+const sitoutW = 3.0;      // sit-out width (left portion)
+const sitoutD = 2.2;      // sit-out projection depth forward
+const platThick = 0.12;   // platform slab thickness
+const storageH = floorH - platThick; // open space height below platform
+
+// Key X positions (left edge = -mainW/2 = -3.5)
+const leftEdge = -mainW / 2;          // -3.5
+const sitoutRightEdge = leftEdge + sitoutW; // -0.5
+const rightEdge = mainW / 2;          // 3.5
+
+// Key Z positions
+const frontZ = mainD / 2;             // 3.0  (main front wall)
+const backZ = -mainD / 2;             // -3.0
+const sitoutFrontZ = frontZ + sitoutD; // 5.2  (sit-out front edge)
+
+// ══════════════════════════════════════════
+// PLATFORM & STORAGE
+// ══════════════════════════════════════════
+// Solid concrete foundation - fills interior, inset from front/sides for storage
+const foundationInset = 0.4;
+const foundFrontZ = sitoutFrontZ - 0.5; // foundation stops 0.5 back from front edge
+house.add(posBox(mainW - foundationInset * 2, floorH, (foundFrontZ - backZ), concrete,
+  0, floorH / 2, (foundFrontZ + backZ) / 2));
+
+// -- Platform slabs (thin, extend over storage to edges) --
+house.add(posBox(mainW, platThick, mainD, concrete, 0, floorH - platThick/2, 0));
+house.add(posBox(sitoutW, platThick, sitoutD, concrete,
+  leftEdge + sitoutW/2, floorH - platThick/2, frontZ + sitoutD/2));
+
+// -- Front supports: sit-out --
+// Aligned at sitoutFrontZ, flush with platform front edge
+const supH = floorH - platThick; // height of open storage space
+const supW = 0.15;
+house.add(posBox(supW, supH, supW, concreteDark, leftEdge + 0.15, supH/2, sitoutFrontZ));
+house.add(posBox(supW, supH, supW, concreteDark, sitoutRightEdge - 0.15, supH/2, sitoutFrontZ));
+// Mid support under sit-out front
+house.add(posBox(supW, supH, supW, concreteDark, leftEdge + sitoutW/2, supH/2, sitoutFrontZ));
+
+// -- Side supports: left wall -- (defined after left wall section below)
+
+// -- Side supports: right wall -- (defined after right wall section below)
+
+// -- Platform edge lip --
+house.add(posBox(sitoutW, 0.08, 0.08, concrete,
+  leftEdge + sitoutW/2, floorH + 0.01, sitoutFrontZ + 0.04));
+house.add(posBox(rightEdge - sitoutRightEdge - 0.15, 0.08, 0.08, concrete,
+  sitoutRightEdge + 0.15 + (rightEdge - sitoutRightEdge - 0.15)/2, floorH + 0.01, sitoutFrontZ + 0.04));
+
+
+// ══════════════════════════════════════════
+// STOREROOM PLINTH (keep as solid - item 5)
+// ══════════════════════════════════════════
+const storeX = rightEdge + storeW / 2;
+// Storeroom moved forward: bottom step aligns with sitoutFrontZ
+const storeDepth = 4.5;
+const storeFrontZ = sitoutFrontZ - 0.3 - 3 * 0.28; // bottom step at sitoutFrontZ
+const storeBackZ = storeFrontZ - storeDepth;
+const storeCenterZ = (storeFrontZ + storeBackZ) / 2;
+house.add(posBox(storeW, floorH, storeDepth, concrete,
+  storeX, floorH / 2, storeCenterZ));
+
+
+// ══════════════════════════════════════════
+// WALLS
+// ══════════════════════════════════════════
+const wallBase = floorH;
+
+// -- Back wall (with door) --
+const backDoorW = 0.9;
+const backDoorH = 2.2;
+const backDoorX = 0; // centered on back wall
+
+// Wall segment left of back door
+const backLeftW = (backDoorX - backDoorW/2) - leftEdge;
+house.add(posBox(backLeftW, wallH, wallT, whitePlaster,
+  leftEdge + backLeftW/2, wallBase + wallH/2, backZ));
+
+// Wall segment right of back door
+const backRightStart = backDoorX + backDoorW/2;
+const backRightW = rightEdge - backRightStart;
+house.add(posBox(backRightW, wallH, wallT, whitePlaster,
+  backRightStart + backRightW/2, wallBase + wallH/2, backZ));
+
+// Wall segment above back door
+house.add(posBox(backDoorW + 0.1, wallH - backDoorH, wallT, whitePlaster,
+  backDoorX, wallBase + backDoorH + (wallH - backDoorH)/2, backZ));
+
+// Back door frame
+house.add(posBox(backDoorW + 0.12, 0.06, 0.2, frameMat,
+  backDoorX, wallBase + backDoorH, backZ - 0.02));
+house.add(posBox(0.06, backDoorH, 0.2, frameMat,
+  backDoorX - backDoorW/2 - 0.03, wallBase + backDoorH/2, backZ - 0.02));
+house.add(posBox(0.06, backDoorH, 0.2, frameMat,
+  backDoorX + backDoorW/2 + 0.03, wallBase + backDoorH/2, backZ - 0.02));
+
+// Back door panel
+house.add(posBox(backDoorW, backDoorH, 0.05, woodDoor,
+  backDoorX, wallBase + backDoorH/2, backZ - 0.05));
+
+// -- Left wall: inset with platform ledge (same pattern as front room) --
+const leftSetback = 0.7;
+const leftWallX = leftEdge + leftSetback; // wall pushed inward
+const leftWinH = 1.6; // same as front window
+const leftWinW = 2.2;
+const leftWinBaseY = wallBase + 0.9;
+
+// Window centers along Z
+const leftWin1Z = -1.5; // back room window
+const leftWin2Z = 1.5;  // front room window
+const leftSepZ = 0;     // separation between windows
+
+// Wall segments around windows (at x = leftWallX, oriented along Z)
+// Segment 1: backZ to first window
+const seg1Start = backZ;
+const seg1End = leftWin1Z - leftWinW/2;
+const seg1Len = seg1End - seg1Start;
+house.add(posBox(wallT, wallH, seg1Len, whitePlaster,
+  leftWallX, wallBase + wallH/2, seg1Start + seg1Len/2));
+
+// Segment 2: between windows (gap between win1 and win2)
+const seg2Start = leftWin1Z + leftWinW/2;
+const seg2End = leftWin2Z - leftWinW/2;
+const seg2Len = seg2End - seg2Start;
+house.add(posBox(wallT, wallH, seg2Len, whitePlaster,
+  leftWallX, wallBase + wallH/2, seg2Start + seg2Len/2));
+
+// Segment 3: after second window to frontZ
+const seg3Start = leftWin2Z + leftWinW/2;
+const seg3End = frontZ;
+const seg3Len = seg3End - seg3Start;
+house.add(posBox(wallT, wallH, seg3Len, whitePlaster,
+  leftWallX, wallBase + wallH/2, seg3Start + seg3Len/2));
+
+// Below each window
+house.add(posBox(wallT, leftWinBaseY - wallBase, leftWinW, whitePlaster,
+  leftWallX, wallBase + (leftWinBaseY - wallBase)/2, leftWin1Z));
+house.add(posBox(wallT, leftWinBaseY - wallBase, leftWinW, whitePlaster,
+  leftWallX, wallBase + (leftWinBaseY - wallBase)/2, leftWin2Z));
+
+// Above each window
+const leftAboveH = wallH - (leftWinBaseY - wallBase + leftWinH);
+house.add(posBox(wallT, leftAboveH, leftWinW, whitePlaster,
+  leftWallX, leftWinBaseY + leftWinH + leftAboveH/2, leftWin1Z));
+house.add(posBox(wallT, leftAboveH, leftWinW, whitePlaster,
+  leftWallX, leftWinBaseY + leftWinH + leftAboveH/2, leftWin2Z));
+
+// -- Left side pillar/walls (run from wall to platform edge, like front room) --
+const leftPillarW = 0.22;
+// Back pillar/wall
+house.add(posBox(leftSetback + 0.1, wallH, leftPillarW, whitePlaster,
+  leftWallX - (leftSetback + 0.1)/2, wallBase + wallH/2, backZ));
+// Separation pillar/wall between windows at z=0
+house.add(posBox(leftSetback + 0.1, wallH, leftPillarW, whitePlaster,
+  leftWallX - (leftSetback + 0.1)/2, wallBase + wallH/2, leftSepZ));
+// Front pillar/wall
+house.add(posBox(leftSetback + 0.1, wallH, leftPillarW, whitePlaster,
+  leftWallX - (leftSetback + 0.1)/2, wallBase + wallH/2, frontZ));
+
+// -- Left side platform slab (extends from wall to original leftEdge) --
+house.add(posBox(leftSetback, platThick, mainD, concrete,
+  leftEdge + leftSetback/2, floorH - platThick/2, 0));
+
+// -- Left side platform edge lip --
+house.add(posBox(0.08, 0.08, mainD, concrete,
+  leftEdge - 0.04, floorH + 0.01, 0));
+
+// -- Left side support beams below (aligned with pillar/walls above) --
+const leftBeamLen = leftSetback;
+const leftBeamCenterX = leftWallX - leftBeamLen/2;
+// Back beam
+house.add(posBox(leftBeamLen, supH, supW, concreteDark,
+  leftBeamCenterX, supH/2, backZ));
+// Separation beam (between windows, at z=0)
+house.add(posBox(leftBeamLen, supH, supW, concreteDark,
+  leftBeamCenterX, supH/2, leftSepZ));
+// Front beam
+house.add(posBox(leftBeamLen, supH, supW, concreteDark,
+  leftBeamCenterX, supH/2, frontZ));
+// Edge supports at leftEdge
+house.add(posBox(supW, supH, supW, concreteDark,
+  leftEdge + 0.05, supH/2, backZ));
+house.add(posBox(supW, supH, supW, concreteDark,
+  leftEdge + 0.05, supH/2, leftSepZ));
+house.add(posBox(supW, supH, supW, concreteDark,
+  leftEdge + 0.05, supH/2, frontZ));
+
+// -- Right wall: inset with platform ledge (same pattern as left side) --
+const rightSetback = 0.7;
+const rightWallX = rightEdge - rightSetback; // wall pushed inward
+const rightWinZ = 0; // single centered window
+
+// Wall segments around single centered window (at x = rightWallX)
+// Segment: backZ to window start
+const rSeg1End = rightWinZ - leftWinW/2;
+const rSeg1Len = rSeg1End - backZ;
+house.add(posBox(wallT, wallH, rSeg1Len, whitePlaster,
+  rightWallX, wallBase + wallH/2, backZ + rSeg1Len/2));
+
+// Segment: window end to frontZ
+const rSeg2Start = rightWinZ + leftWinW/2;
+const rSeg2Len = frontZ - rSeg2Start;
+house.add(posBox(wallT, wallH, rSeg2Len, whitePlaster,
+  rightWallX, wallBase + wallH/2, rSeg2Start + rSeg2Len/2));
+
+// Below window
+house.add(posBox(wallT, leftWinBaseY - wallBase, leftWinW, whitePlaster,
+  rightWallX, wallBase + (leftWinBaseY - wallBase)/2, rightWinZ));
+
+// Above window
+house.add(posBox(wallT, leftAboveH, leftWinW, whitePlaster,
+  rightWallX, leftWinBaseY + leftWinH + leftAboveH/2, rightWinZ));
+
+// -- Right side pillar/walls (run from wall to platform edge) --
+// Back pillar/wall
+house.add(posBox(rightSetback + 0.1, wallH, leftPillarW, whitePlaster,
+  rightWallX + (rightSetback + 0.1)/2, wallBase + wallH/2, backZ));
+// Front pillar/wall
+house.add(posBox(rightSetback + 0.1, wallH, leftPillarW, whitePlaster,
+  rightWallX + (rightSetback + 0.1)/2, wallBase + wallH/2, frontZ));
+
+// -- Right side platform slab --
+house.add(posBox(rightSetback, platThick, mainD, concrete,
+  rightEdge - rightSetback/2, floorH - platThick/2, 0));
+
+// -- Right side platform edge lip --
+house.add(posBox(0.08, 0.08, mainD, concrete,
+  rightEdge + 0.04, floorH + 0.01, 0));
+
+// -- Right side support beams below (aligned with pillar/walls above) --
+const rightBeamLen = rightSetback;
+const rightBeamCenterX = rightWallX + rightBeamLen/2;
+// Back beam
+house.add(posBox(rightBeamLen, supH, supW, concreteDark,
+  rightBeamCenterX, supH/2, backZ));
+// Front beam
+house.add(posBox(rightBeamLen, supH, supW, concreteDark,
+  rightBeamCenterX, supH/2, frontZ));
+// Edge supports at rightEdge
+house.add(posBox(supW, supH, supW, concreteDark,
+  rightEdge - 0.05, supH/2, backZ));
+house.add(posBox(supW, supH, supW, concreteDark,
+  rightEdge - 0.05, supH/2, frontZ));
+
+// -- Front wall: sit-out back wall (item 3) --
+// This wall is the back of the sit-out, which is the main front wall
+// but it starts slightly recessed (0.3 inward) on the sit-out portion
+// Room protrudes forward to sitoutFrontZ (same front line as sit-out)
+
+// Sit-out back wall: left of entrance door
+// The entrance door is near the right edge of sit-out
+const doorW = 0.9;
+const doorH = 2.2;
+const doorCenterX = sitoutRightEdge - 0.6; // door near right side of sitout
+// Wall segment left of door
+const leftWallW = (doorCenterX - doorW/2) - leftEdge;
+if (leftWallW > 0.05) {
+  house.add(posBox(leftWallW, wallH, wallT, whitePlaster,
+    leftEdge + leftWallW/2, wallBase + wallH/2, frontZ));
+}
+// Wall segment above door
+house.add(posBox(doorW + 0.1, wallH - doorH, wallT, whitePlaster,
+  doorCenterX, wallBase + doorH + (wallH - doorH)/2, frontZ));
+
+// -- Front wall: main room section (right of sit-out) --
+// Room wall set back from sitoutFrontZ, platform extends forward to sitoutFrontZ
+const roomSetback = 0.7; // how far room wall is behind the front edge
+const roomWallZ = sitoutFrontZ - roomSetback;
+const roomProtrusion = sitoutD; // platform still extends full depth
+const roomW = rightEdge - sitoutRightEdge - 0.15; // room section width
+
+// We need segments around the 3-pane window
+const winW = 2.2, winH = 1.6;
+const winCenterX = sitoutRightEdge + 0.15 + roomW / 2; // centered in room section
+const winBaseY = wallBase + 0.9; // window sill height
+
+// Segment left of window
+const roomSectionLeft = sitoutRightEdge + 0.15;
+const segLeftW = (winCenterX - winW/2) - roomSectionLeft;
+house.add(posBox(segLeftW, wallH, wallT, whitePlaster,
+  roomSectionLeft + segLeftW/2, wallBase + wallH/2, roomWallZ));
+
+// Segment right of window
+const segRightLeft = winCenterX + winW/2;
+const segRightW = rightEdge - segRightLeft;
+house.add(posBox(segRightW, wallH, wallT, whitePlaster,
+  segRightLeft + segRightW/2, wallBase + wallH/2, roomWallZ));
+
+// Below window
+house.add(posBox(winW, winBaseY - wallBase, wallT, whitePlaster,
+  winCenterX, wallBase + (winBaseY - wallBase)/2, roomWallZ));
+
+// Above window
+const aboveWinH = wallH - (winBaseY - wallBase + winH);
+house.add(posBox(winW, aboveWinH, wallT, whitePlaster,
+  winCenterX, winBaseY + winH + aboveWinH/2, roomWallZ));
+
+// -- Room protrusion side walls (only up to room wall, not full sitoutFrontZ) --
+const sideWallD = roomWallZ - frontZ; // from original frontZ to room wall
+// Left side wall of protruding room
+house.add(posBox(wallT, wallH, sideWallD, whitePlaster,
+  sitoutRightEdge + 0.15, wallBase + wallH/2, frontZ + sideWallD/2));
+
+// Right side wall extension
+house.add(posBox(wallT, wallH, sideWallD, whitePlaster,
+  rightEdge, wallBase + wallH/2, frontZ + sideWallD/2));
+
+// -- Room protrusion platform slab (extends full depth to sitoutFrontZ) --
+house.add(posBox(roomW, platThick, roomProtrusion, concrete,
+  sitoutRightEdge + 0.15 + roomW/2, floorH - platThick/2, frontZ + roomProtrusion/2));
+
+// -- Storage recess below room protrusion --
+// Left wall beam (aligns with left pillar/wall above)
+const beamDepth = roomSetback;
+const beamCenterZ = roomWallZ + beamDepth / 2;
+house.add(posBox(supW, supH, beamDepth, concreteDark,
+  sitoutRightEdge + 0.15, supH/2, beamCenterZ));
+// Right wall beam (aligns with right pillar/wall above)
+house.add(posBox(supW, supH, beamDepth, concreteDark,
+  rightEdge, supH/2, beamCenterZ));
+// Front supports under room protrusion platform edge
+house.add(posBox(supW, supH, supW, concreteDark,
+  sitoutRightEdge + 0.15, supH/2, sitoutFrontZ));
+house.add(posBox(supW, supH, supW, concreteDark,
+  winCenterX, supH/2, sitoutFrontZ));
+house.add(posBox(supW, supH, supW, concreteDark,
+  rightEdge, supH/2, sitoutFrontZ));
+
+
+// ══════════════════════════════════════════
+// PILLARS (item 3)
+// ══════════════════════════════════════════
+// Front-left pillar of sit-out: right behind front brick wall, slightly inset from left
+const pillarSize = 0.22;
+const pillarW = 0.30; // wider pillar
+house.add(posBox(pillarW, wallH, pillarW, whitePlaster,
+  leftEdge + 0.55, wallBase + wallH/2, sitoutFrontZ - pillarW/2 - 0.08));
+
+// Separation pillar/wall between sit-out and room (LEFT side of room)
+// Runs from front platform edge back to room wall
+house.add(posBox(pillarSize, wallH, roomSetback + 0.1, whitePlaster,
+  sitoutRightEdge + 0.15, wallBase + wallH/2, roomWallZ + (roomSetback + 0.1)/2));
+
+// Separation pillar/wall between room and storeroom (RIGHT side of room)
+// Runs from front platform edge back to room wall
+house.add(posBox(pillarSize, wallH, roomSetback + 0.1, whitePlaster,
+  rightEdge, wallBase + wallH/2, roomWallZ + (roomSetback + 0.1)/2));
+
+// Left side of thinna is OPEN — no full wall, only brick half-wall exists here
+
+
+// ══════════════════════════════════════════
+// BRICK HALF-WALL / THINNA (item 2 & 3)
+// ══════════════════════════════════════════
+const halfWallH = 1.0;
+
+// Front brick half-wall: stops BEFORE the stairway
+const stepsX = doorCenterX;
+const stepW = 1.2;
+const brickT = 0.15;
+// Front wall starts from left corner (where side wall is) to before steps
+const brickFrontLeft = leftEdge + brickT/2; // starts at outer edge of side wall
+const brickFrontRight = stepsX - stepW/2 - 0.15; // stop before steps
+const brickFrontW = brickFrontRight - brickFrontLeft;
+
+if (brickFrontW > 0.1) {
+  house.add(posBox(brickFrontW, halfWallH, brickT, brickMat,
+    brickFrontLeft + brickFrontW/2, wallBase + halfWallH/2, sitoutFrontZ));
+  // Concrete cap
+  house.add(posBox(brickFrontW + 0.06, 0.07, 0.22, concrete,
+    brickFrontLeft + brickFrontW/2, wallBase + halfWallH + 0.035, sitoutFrontZ));
+}
+
+// Left side brick half-wall - runs full depth of sit-out to meet front wall at corner
+const brickSideD = sitoutD;
+house.add(posBox(brickT, halfWallH, brickSideD, brickMat,
+  leftEdge + brickT/2, wallBase + halfWallH/2, frontZ + brickSideD/2));
+// Concrete cap on left side
+house.add(posBox(0.22, 0.07, brickSideD + 0.06, concrete,
+  leftEdge + brickT/2, wallBase + halfWallH + 0.035, frontZ + brickSideD/2));
+
+
+// ══════════════════════════════════════════
+// ENTRANCE DOOR
+// ══════════════════════════════════════════
+// Door frame
+house.add(posBox(doorW + 0.12, 0.06, 0.2, frameMat,
+  doorCenterX, wallBase + doorH, frontZ + 0.02));
+house.add(posBox(0.06, doorH, 0.2, frameMat,
+  doorCenterX - doorW/2 - 0.03, wallBase + doorH/2, frontZ + 0.02));
+house.add(posBox(0.06, doorH, 0.2, frameMat,
+  doorCenterX + doorW/2 + 0.03, wallBase + doorH/2, frontZ + 0.02));
+
+// Door panel (slightly open)
+const doorMesh = posBox(doorW, doorH, 0.05, woodDoor,
+  doorCenterX + 0.2, wallBase + doorH/2, frontZ + 0.15);
+doorMesh.rotation.y = 0.4;
+house.add(doorMesh);
+
+
+// ══════════════════════════════════════════
+// THREE-PANE WINDOW (front, main room)
+// ══════════════════════════════════════════
+const winY = winBaseY + winH/2;
+const winZ = roomWallZ + 0.02;
+
+// Outer frame
+house.add(posBox(winW + 0.1, 0.06, 0.12, woodWindow, winCenterX, winY + winH/2, winZ));
+house.add(posBox(winW + 0.1, 0.06, 0.12, woodWindow, winCenterX, winY - winH/2, winZ));
+house.add(posBox(0.06, winH, 0.12, woodWindow, winCenterX - winW/2, winY, winZ));
+house.add(posBox(0.06, winH, 0.12, woodWindow, winCenterX + winW/2, winY, winZ));
+
+// Mullions (2 dividers = 3 panes)
+house.add(posBox(0.05, winH, 0.1, woodWindow, winCenterX - winW/6, winY, winZ));
+house.add(posBox(0.05, winH, 0.1, woodWindow, winCenterX + winW/6, winY, winZ));
+
+// Grid bars and arches per pane
+for (let p = -1; p <= 1; p++) {
+  const paneX = winCenterX + p * winW / 3;
+  const paneW = winW / 3 - 0.06;
+  // Horizontal bars
+  for (let j = 1; j <= 3; j++) {
+    house.add(posBox(paneW, 0.02, 0.08, woodWindow,
+      paneX, winY - winH/2 + j * winH/4, winZ + 0.01));
+  }
+  // Vertical bars
+  for (let j = 1; j <= 2; j++) {
+    house.add(posBox(0.02, winH, 0.08, woodWindow,
+      paneX - paneW/2 + j * paneW/3, winY, winZ + 0.01));
+  }
+}
+// Glass
+house.add(posBox(winW, winH, 0.02, glassMat, winCenterX, winY, winZ - 0.04));
+
+
+// ══════════════════════════════════════════
+// SIDE WINDOWS (left & right, 2 each) + storage
+// ══════════════════════════════════════════
+function createThreePaneWindow(x, y, z, rotY) {
+  const wg = new THREE.Group();
+  const tw = 2.2, th = 1.6;
+
+  // Outer frame
+  wg.add(posBox(tw + 0.1, 0.06, 0.12, woodWindow, 0, th/2, 0));
+  wg.add(posBox(tw + 0.1, 0.06, 0.12, woodWindow, 0, -th/2, 0));
+  wg.add(posBox(0.06, th, 0.12, woodWindow, -tw/2, 0, 0));
+  wg.add(posBox(0.06, th, 0.12, woodWindow, tw/2, 0, 0));
+
+  // Mullions (3 panes)
+  wg.add(posBox(0.05, th, 0.1, woodWindow, -tw/6, 0, 0));
+  wg.add(posBox(0.05, th, 0.1, woodWindow, tw/6, 0, 0));
+
+  // Grid bars per pane
+  for (let p = -1; p <= 1; p++) {
+    const paneX = p * tw / 3;
+    const paneW = tw / 3 - 0.06;
+    for (let j = 1; j <= 3; j++) {
+      wg.add(posBox(paneW, 0.02, 0.08, woodWindow,
+        paneX, -th/2 + j * th/4, 0.01));
+    }
+    for (let j = 1; j <= 2; j++) {
+      wg.add(posBox(0.02, th, 0.08, woodWindow,
+        paneX - paneW/2 + j * paneW/3, 0, 0.01));
+    }
+  }
+
+  // Glass
+  wg.add(posBox(tw, th, 0.02, glassMat, 0, 0, -0.04));
+
+  wg.position.set(x, y, z);
+  wg.rotation.y = rotY;
+  house.add(wg);
+}
+
+// Left side - two 3-pane windows (on inset wall, facing outward)
+createThreePaneWindow(leftWallX - 0.08, wallBase + wallH/2 + 0.1, leftWin1Z, Math.PI/2);
+createThreePaneWindow(leftWallX - 0.08, wallBase + wallH/2 + 0.1, leftWin2Z, Math.PI/2);
+
+// Right side - single 3-pane window centered on inset wall
+createThreePaneWindow(rightWallX + 0.08, wallBase + wallH/2 + 0.1, rightWinZ, -Math.PI/2);
+
+
+// ══════════════════════════════════════════
+// STOREROOM
+// ══════════════════════════════════════════
+// Front wall (brick)
+house.add(posBox(storeW, wallH, wallT, brickMat,
+  storeX, wallBase + wallH/2, storeFrontZ));
+// Right wall (brick)
+house.add(posBox(wallT, wallH, storeDepth, brickMat,
+  rightEdge + storeW, wallBase + wallH/2, storeCenterZ));
+// Back wall (brick)
+house.add(posBox(storeW, wallH, wallT, brickMat,
+  storeX, wallBase + wallH/2, storeBackZ));
+
+// Storeroom door
+const storeDoorX = storeX;
+house.add(posBox(0.7, 1.8, 0.06, woodDoor,
+  storeDoorX, wallBase + 0.9, storeFrontZ + 0.1));
+house.add(posBox(0.76, 0.06, 0.15, frameMat, storeDoorX, wallBase + 1.83, storeFrontZ + 0.1));
+house.add(posBox(0.06, 1.8, 0.15, frameMat, storeDoorX - 0.38, wallBase + 0.9, storeFrontZ + 0.1));
+house.add(posBox(0.06, 1.8, 0.15, frameMat, storeDoorX + 0.38, wallBase + 0.9, storeFrontZ + 0.1));
+
+// Storeroom steps - bottom step aligns with sitoutFrontZ
+const stepD = 0.28, stepH = 0.2;
+for (let i = 0; i < 4; i++) {
+  house.add(posBox(0.8, stepH, stepD, concrete,
+    storeDoorX, stepH/2 + i * stepH, storeFrontZ + 0.3 + (3 - i) * stepD));
+}
+
+// (Storeroom roof now in main ROOF & PARAPET section)
+
+
+// ══════════════════════════════════════════
+// MAIN STEPS (to sit-out) - item 2
+// ══════════════════════════════════════════
+for (let i = 0; i < 4; i++) {
+  house.add(posBox(stepW, stepH, 0.35, concrete,
+    stepsX, stepH/2 + i * stepH, sitoutFrontZ + (3 - i) * 0.35));
+}
+
+
+// ══════════════════════════════════════════
+// ROOF & PARAPET
+// ══════════════════════════════════════════
+const roofThick = 0.15;
+const parapetH = 0.65;
+const parapetT = 0.15;
+const sunSide = 0.35;  // sunshade overhang on sides and back
+const sunFront = 0.6;  // sunshade overhang at front (more pronounced)
+
+// Key Y positions
+const roofTopY = wallBase + wallH;
+const roofSlabY = roofTopY + roofThick / 2;
+const parapetY = roofTopY + roofThick + parapetH / 2;
+
+// -- Roof slab --
+const roofLeft = leftEdge - sunSide;
+const roofRight = rightEdge + sunSide;
+const roofBack = backZ - sunSide;
+const roofFront = sitoutFrontZ + sunFront;
+house.add(posBox(roofRight - roofLeft, roofThick, roofFront - roofBack, roofMat,
+  (roofLeft + roofRight) / 2, roofSlabY, (roofBack + roofFront) / 2));
+
+// -- Uniform parapet around building walls --
+
+// 1. Back parapet: at backZ, spanning between left and right inset walls
+house.add(posBox(rightWallX - leftWallX + parapetT, parapetH, parapetT, whitePlaster,
+  (leftWallX + rightWallX) / 2, parapetY, backZ));
+
+// 2. Left parapet: at leftWallX from backZ to frontZ
+house.add(posBox(parapetT, parapetH, mainD + parapetT, whitePlaster,
+  leftWallX, parapetY, 0));
+
+// 3. Right parapet: at rightWallX from backZ to frontZ
+house.add(posBox(parapetT, parapetH, mainD + parapetT, whitePlaster,
+  rightWallX, parapetY, 0));
+
+// 4. Sit-out back wall parapet: at frontZ, from leftWallX to room return
+const sitoutParapetW = sitoutRightEdge + 0.15 - leftWallX;
+house.add(posBox(sitoutParapetW + parapetT, parapetH, parapetT, whitePlaster,
+  leftWallX + sitoutParapetW / 2, parapetY, frontZ));
+
+// 5. Right side wall at frontZ connecting rightWallX to rightEdge (room right wall)
+const rightReturnW = rightEdge - rightWallX;
+house.add(posBox(rightReturnW, parapetH, parapetT, whitePlaster,
+  rightWallX + rightReturnW / 2, parapetY, frontZ));
+
+// 6. Left room return: at sitoutRightEdge from frontZ to roomWallZ
+const returnD = roomWallZ - frontZ;
+house.add(posBox(parapetT, parapetH, returnD + parapetT, whitePlaster,
+  sitoutRightEdge + 0.15, parapetY, frontZ + returnD / 2));
+
+// 7. Front room parapet: at roomWallZ from left return to right wall
+const frontParapetW = rightEdge - sitoutRightEdge;
+house.add(posBox(frontParapetW + parapetT, parapetH, parapetT, whitePlaster,
+  sitoutRightEdge + frontParapetW / 2, parapetY, roomWallZ));
+
+// 8. Right room return: at rightEdge from frontZ to roomWallZ
+house.add(posBox(parapetT, parapetH, returnD + parapetT, whitePlaster,
+  rightEdge, parapetY, frontZ + returnD / 2));
+
+// -- Storeroom roof + parapet --
+house.add(posBox(storeW + sunSide, roofThick, storeDepth + sunSide, roofMat,
+  storeX, roofSlabY, storeCenterZ));
+// Storeroom back parapet
+house.add(posBox(storeW + parapetT, parapetH, parapetT, whitePlaster,
+  storeX, parapetY, storeBackZ));
+// Storeroom right parapet
+house.add(posBox(parapetT, parapetH, storeDepth, whitePlaster,
+  rightEdge + storeW, parapetY, storeCenterZ));
+// Storeroom front parapet
+house.add(posBox(storeW + parapetT, parapetH, parapetT, whitePlaster,
+  storeX, parapetY, storeFrontZ));
+
+
+// ══════════════════════════════════════════
+// INTERIOR HINT (visible through open door)
+// ══════════════════════════════════════════
+const interiorMat = new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.9 });
+// Interior cross wall
+house.add(posBox(0.1, wallH, mainD * 0.5, interiorMat,
+  sitoutRightEdge, wallBase + wallH/2, -mainD * 0.15));
+// Floor inside
+house.add(posBox(mainW - 0.3, 0.02, mainD - 0.3, floorTile,
+  0, floorH + 0.01, 0));
+
+
+// ══════════════════════════════════════════
+// SIT-OUT FLOOR
+// ══════════════════════════════════════════
+house.add(posBox(sitoutW - 0.15, 0.02, sitoutD - 0.15, floorTile,
+  leftEdge + sitoutW/2, floorH + 0.01, frontZ + sitoutD/2));
+
+
+// ══════════════════════════════════════════
+// POTTED PLANT (on the platform ledge)
+// ══════════════════════════════════════════
+function createPlant(x, y, z) {
+  const pg = new THREE.Group();
+  const potGeo = new THREE.CylinderGeometry(0.12, 0.09, 0.22, 8);
+  const pot = new THREE.Mesh(potGeo, new THREE.MeshStandardMaterial({ color: 0x3a2518, roughness: 0.9 }));
+  pot.position.y = 0.11; pot.castShadow = true;
+  pg.add(pot);
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x3d7a2a, roughness: 0.8 });
+  for (let i = 0; i < 8; i++) {
+    const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 4), leafMat);
+    leaf.scale.set(1, 0.3, 1);
+    leaf.position.set(Math.cos(i*Math.PI/4)*0.1, 0.3+Math.random()*0.2, Math.sin(i*Math.PI/4)*0.1);
+    leaf.rotation.set(Math.random()*0.5, 0, Math.random()*0.5);
+    leaf.castShadow = true;
+    pg.add(leaf);
+  }
+  pg.position.set(x, y, z);
+  house.add(pg);
+}
+createPlant(winCenterX - 0.8, floorH, roomWallZ + roomSetback/2);
+
+    return house;
+}
+
+// ============================================================
+// EDITABLE REGISTRY
+// ============================================================
+const editableObjects = {};
+let selectedId = null;
+const gltfLoader = new GLTFLoader();
+
+// Load saved layout from localStorage
+const savedLayout = (() => { try { return JSON.parse(localStorage.getItem('sceneLayout')); } catch { return null; } })();
+if (savedLayout) console.log('Editor loading saved layout:', Object.keys(savedLayout).length, 'objects');
+
+function reg(id, obj) {
+    editableObjects[id] = obj;
+    obj.userData.editId = id;
+    // Apply saved layout if exists
+    if (savedLayout && savedLayout[id]) {
+        const l = savedLayout[id];
+        obj.position.set(l.position.x, l.position.y, l.position.z);
+        obj.scale.set(l.scale.x, l.scale.y, l.scale.z);
+        obj.rotation.y = l.rotation.y;
+    }
+    refreshList();
+}
+
+// Place house
+const houseObj = createKeralaHouse();
+houseObj.position.set(0, getTerrainY(0, 0), 0);
+scene.add(houseObj);
+reg('house', houseObj);
+
+// Well
+const wellG = new THREE.Group();
+const sM = new THREE.MeshStandardMaterial({ color: 0x606060, roughness: 0.85 });
+const wM = new THREE.MeshStandardMaterial({ color: 0x5A3518, roughness: 0.7 });
+wellG.add(new THREE.Mesh(new THREE.CylinderGeometry(1.8,2,2.5,16,1,true), sM).translateY(1.25));
+wellG.add(new THREE.Mesh(new THREE.TorusGeometry(1.9,0.2,6,16), sM).translateY(2.5).rotateX(Math.PI/2));
+[-1,1].forEach(x => wellG.add(new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,3,6), wM).translateX(x).translateY(4)));
+wellG.scale.set(0.45,0.45,0.45);
+placeOnTerrain(wellG, -3, -19, 0.2);
+scene.add(wellG);
+reg('well', wellG);
+
+// Rock
+const rmtl = new MTLLoader(); rmtl.setPath('assets/rock/');
+rmtl.load('rock.mtl', m => {
+    m.preload();
+    const rl = new OBJLoader(); rl.setMaterials(m); rl.setPath('assets/rock/');
+    rl.load('uploads_files_6235936_free+rock+250623-highpoly.obj', obj => {
+        obj.scale.set(0.18,0.14,0.35);
+        obj.traverse(c => { if(c.isMesh){c.castShadow=true;c.receiveShadow=true;} });
+        obj.updateMatrixWorld(true);
+        const b = new THREE.Box3().setFromObject(obj);
+        obj.position.set(14, getTerrainY(14,18)-b.min.y, 18);
+        obj.rotation.y = 0.4;
+        scene.add(obj); reg('rock', obj);
+    });
+});
+
+// Coconuts
+const coconutPos = [
+    [-9,-12],[10,-10],[-16,4],[18,8],[-22,-15],[25,-6],[-12,18],[30,4],[-32,2],[36,-8],
+    [5,25],[-6,-22],[14,-18],[-18,-8],[8,-25],[-28,-5],[22,15],[-8,28],[40,2],[-38,-10],
+    [-5,-18],[3,-20],[-14,-6],[16,-4],[-20,10],[28,-12],[-25,-22],[35,10],[-30,8],[20,-20],
+    [-10,-30],[8,-32],[-18,14],[32,-18],[-35,-8],[42,-4],[-40,5],[15,22],[-8,-35],[25,18],
+];
+gltfLoader.load('assets/coconut_tree/coconut_tree.glb', gltf => {
+    gltf.scene.traverse(c => { if(c.isMesh){c.castShadow=true;c.receiveShadow=true;} });
+    coconutPos.forEach(([x,z], i) => {
+        const ht = 16+hash2D(x,z)*6, clone = gltf.scene.clone(), s = ht/1565;
+        clone.scale.set(s,s,s);
+        clone.rotation.y = hash2D(x+1,z+1)*Math.PI*2;
+        placeOnTerrain(clone, x, z, 0);
+        scene.add(clone); reg(`coconut_${i}`, clone);
+    });
+});
+
+// Bananas
+const bmtl = new MTLLoader(); bmtl.setPath('assets/banana_plant/');
+bmtl.load('banana.mtl', m => {
+    m.preload();
+    const bl = new OBJLoader(); bl.setMaterials(m); bl.setPath('assets/banana_plant/');
+    bl.load('uploads_files_2543479_Banana_Plant_01.obj', obj => {
+        obj.traverse(c => { if(c.isMesh){c.castShadow=true;} });
+        [[-8,-6],[7,-14],[-12,2],[5,-8],[-4,-15],[10,-5]].forEach(([x,z],i) => {
+            const cl = obj.clone(); cl.scale.set(1.5,1.5,1.5);
+            cl.rotation.y = hash2D(x,z)*Math.PI*2;
+            placeOnTerrain(cl, x, z, 0);
+            scene.add(cl); reg(`banana_${i}`, cl);
+        });
+    });
+});
+
+// Mangos
+const mmtl = new MTLLoader(); mmtl.setPath('assets/mango_tree/');
+mmtl.load('mango.mtl', m => {
+    m.preload();
+    const vars = ['tree_mango_var01.obj','tree_mango_var02.obj','tree_mango_var03.obj'];
+    const tpls = []; let ld = 0;
+    const mp = [[-5,-20],[5,-22],[-10,-25],[8,-28],[-3,-30],[12,-24],[-15,-22],[0,-35],
+        [-18,-5],[-22,2],[-25,-10],[-20,8],[-28,-3],[20,-8],[24,-3],[28,-10],[22,5],[30,-6],
+        [-8,8],[6,6],[-12,-15],[15,-14],[-6,-28]];
+    vars.forEach((f,idx) => {
+        const ml = new OBJLoader(); ml.setMaterials(m);
+        ml.setPath('assets/mango_tree/uploads_files_780879_MangoTreePack_OBJ/');
+        ml.load(f, obj => {
+            obj.traverse(c => { if(c.isMesh)c.castShadow=true; });
+            tpls[idx] = obj; ld++;
+            if (ld >= 1 && tpls.some(t=>t)) {
+                const av = tpls.filter(t=>t);
+                mp.forEach(([x,z],i) => {
+                    const t = av[i%av.length], cl = t.clone();
+                    const om=[]; t.traverse(c=>{if(c.isMesh)om.push(c.material);}); let mi=0;
+                    cl.traverse(c=>{if(c.isMesh)c.material=om[mi++%om.length];});
+                    const sv = 0.04+hash2D(x,z)*0.015;
+                    cl.scale.set(sv,sv,sv); cl.rotation.y=hash2D(x+5,z+5)*Math.PI*2;
+                    placeOnTerrain(cl, x, z, 0);
+                    scene.add(cl); reg(`mango_${i}`, cl);
+                });
+            }
+        });
+    });
+});
+
+// ============================================================
+// SELECTION & GIZMO
+// ============================================================
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+function selectObject(id) {
+    if (terrainMode) return; // can't select objects in terrain mode
+    selectedId = id;
+    const obj = editableObjects[id];
+    if (!obj) return;
+    if (!gizmo.parent) scene.add(gizmo); // ensure gizmo is in scene
+    gizmo.attach(obj);
+    document.getElementById('transformPanel').style.display = 'block';
+    document.getElementById('noSelection').style.display = 'none';
+    document.getElementById('selectedName').textContent = id;
+    updatePanelFromObject();
+    orbit.target.copy(obj.position);
+    refreshList();
+}
+
+function deselectObject() {
+    selectedId = null;
+    gizmo.detach();
+    if (gizmo.parent) scene.remove(gizmo); // remove from scene to prevent render crash
+    document.getElementById('transformPanel').style.display = 'none';
+    document.getElementById('noSelection').style.display = 'block';
+    refreshList();
+}
+
+function updatePanelFromObject() {
+    if (!selectedId) return;
+    const o = editableObjects[selectedId];
+    document.getElementById('px').value = o.position.x.toFixed(2);
+    document.getElementById('py').value = o.position.y.toFixed(2);
+    document.getElementById('pz').value = o.position.z.toFixed(2);
+    document.getElementById('su').value = o.scale.x.toFixed(4);
+    document.getElementById('ry').value = o.rotation.y.toFixed(3);
+}
+
+function refreshList() {
+    const list = document.getElementById('objectList');
+    list.innerHTML = '';
+    for (const [id] of Object.entries(editableObjects)) {
+        const d = document.createElement('div');
+        d.className = 'obj-item' + (id === selectedId ? ' selected' : '');
+        d.textContent = id;
+        d.onclick = () => selectObject(id);
+        list.appendChild(d);
+    }
+}
+
+// Click to select
+renderer.domElement.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    // Don't select if dragging gizmo
+    if (gizmo.dragging) return;
+    const rect = renderer.domElement.getBoundingClientRect();
+    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    const hits = raycaster.intersectObjects(scene.children, true);
+    for (const hit of hits) {
+        let obj = hit.object;
+        while (obj && !obj.userData.editId) obj = obj.parent;
+        if (obj && obj.userData.editId) { selectObject(obj.userData.editId); return; }
+    }
+});
+
+// Number inputs — live update with undo
+['px','py','pz','su','ry'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('focus', () => pushUndo()); // save before editing
+    el.addEventListener('input', () => {
+        if (!selectedId) return;
+        const o = editableObjects[selectedId];
+        o.position.set(+document.getElementById('px').value, +document.getElementById('py').value, +document.getElementById('pz').value);
+        const s = +document.getElementById('su').value;
+        o.scale.set(s, s, s); // uniform scale
+        o.rotation.y = +document.getElementById('ry').value;
+    });
+});
+
+// Snap to ground
+document.getElementById('snapBtn').addEventListener('click', () => {
+    if (!selectedId) return;
+    pushUndo();
+    const o = editableObjects[selectedId];
+    o.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(o);
+    const ty = getTerrainY(o.position.x, o.position.z);
+    o.position.y = ty - (box.min.y - o.position.y);
+    updatePanelFromObject();
+    document.getElementById('status').textContent = `Snapped ${selectedId}`;
+});
+
+// Gizmo mode buttons
+document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        gizmo.setMode(btn.dataset.mode);
+    });
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+    const mod = e.ctrlKey || e.metaKey;
+
+    // Undo: Ctrl+Z / Cmd+Z
+    if (mod && e.code === 'KeyZ' && !e.shiftKey) { e.preventDefault(); undo(); return; }
+    // Redo: Ctrl+Y / Cmd+Y or Ctrl+Shift+Z / Cmd+Shift+Z
+    if (mod && (e.code === 'KeyY' || (e.code === 'KeyZ' && e.shiftKey))) { e.preventDefault(); redo(); return; }
+
+    if (e.target.tagName === 'INPUT') return;
+    const setMode = m => { gizmo.setMode(m); document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m)); };
+    switch (e.code) {
+        case 'KeyG': setMode('translate'); break;
+        case 'KeyR': setMode('rotate'); break;
+        case 'KeyS': if (!mod) setMode('scale'); break;
+        case 'Escape': deselectObject(); break;
+        case 'KeyT': document.getElementById('terrainToggle').click(); break;
+    }
+});
+
+// Export
+document.getElementById('exportBtn').addEventListener('click', () => {
+    const layout = {};
+    for (const [id, o] of Object.entries(editableObjects)) {
+        layout[id] = {
+            position: { x: +o.position.x.toFixed(2), y: +o.position.y.toFixed(2), z: +o.position.z.toFixed(2) },
+            scale: { x: +o.scale.x.toFixed(4), y: +o.scale.y.toFixed(4), z: +o.scale.z.toFixed(4) },
+            rotation: { y: +o.rotation.y.toFixed(3) }
+        };
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(layout, null, 2)], { type: 'application/json' }));
+    a.download = 'scene_layout.json'; a.click();
+    document.getElementById('status').textContent = 'Exported!';
+});
+
+// Launch FPV — save layout to localStorage so FPV reads it
+document.getElementById('launchBtn').addEventListener('click', () => {
+    const layout = {};
+    for (const [id, o] of Object.entries(editableObjects)) {
+        layout[id] = {
+            position: { x: +o.position.x.toFixed(3), y: +o.position.y.toFixed(3), z: +o.position.z.toFixed(3) },
+            scale: { x: +o.scale.x.toFixed(5), y: +o.scale.y.toFixed(5), z: +o.scale.z.toFixed(5) },
+            rotation: { y: +o.rotation.y.toFixed(4) }
+        };
+    }
+    localStorage.setItem('sceneLayout', JSON.stringify(layout));
+    // Also save terrain deltas
+    localStorage.setItem('terrainDeltas', JSON.stringify(terrainDeltas));
+    document.getElementById('status').textContent = 'Layout + terrain saved. Launching FPV...';
+    window.open('index.html', '_blank');
+});
+
+// ============================================================
+// TERRAIN SCULPTING
+// ============================================================
+let terrainMode = false;
+let brushMode = 'raise';
+let brushRadius = 5;
+let brushStrength = 0.5;
+let isPainting = false;
+
+// Toggle terrain mode
+document.getElementById('terrainToggle').addEventListener('click', () => {
+    terrainMode = !terrainMode;
+    document.getElementById('terrainToggle').classList.toggle('active', terrainMode);
+    document.getElementById('terrainControls').style.display = terrainMode ? 'block' : 'none';
+    brushCursor.visible = terrainMode;
+    if (terrainMode) {
+        gizmo.detach();
+        scene.remove(gizmo);
+        deselectObject();
+    }
+    // gizmo is re-added only when an object is selected (in selectObject)
+});
+
+// Brush mode buttons
+document.querySelectorAll('.brush-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.brush-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        brushMode = btn.dataset.brush;
+    });
+});
+
+// Brush controls
+document.getElementById('brushRadius').addEventListener('input', e => {
+    brushRadius = parseFloat(e.target.value);
+    document.getElementById('radiusVal').textContent = brushRadius;
+    updateCursorSize();
+});
+document.getElementById('brushStrength').addEventListener('input', e => {
+    brushStrength = parseFloat(e.target.value);
+    document.getElementById('strengthVal').textContent = brushStrength;
+});
+
+function updateCursorSize() {
+    brushCursor.geometry.dispose();
+    brushCursor.geometry = new THREE.RingGeometry(brushRadius * 0.95, brushRadius, 32);
+    brushCursor.geometry.rotateX(-Math.PI / 2);
+}
+
+// Reset terrain
+document.getElementById('resetTerrainBtn').addEventListener('click', () => {
+    for (const [idx, dy] of Object.entries(terrainDeltas)) {
+        const i = parseInt(idx);
+        tPos.setY(i, tPos.getY(i) - dy);
+    }
+    for (const k in terrainDeltas) delete terrainDeltas[k];
+    tGeo.computeVertexNormals();
+    tPos.needsUpdate = true;
+    localStorage.removeItem('terrainDeltas');
+    document.getElementById('status').textContent = 'Terrain reset';
+});
+
+// Sculpt function
+function sculptTerrain(hitPoint, delta) {
+    const r2 = brushRadius * brushRadius;
+    let changed = false;
+    for (let i = 0; i < tPos.count; i++) {
+        const vx = tPos.getX(i), vz = tPos.getZ(i);
+        const dx = vx - hitPoint.x, dz = vz - hitPoint.z;
+        const dist2 = dx * dx + dz * dz;
+        if (dist2 > r2) continue;
+
+        // Smooth falloff
+        const falloff = 1 - Math.sqrt(dist2) / brushRadius;
+        const amount = falloff * falloff * brushStrength * delta * 30;
+
+        let dy = 0;
+        if (brushMode === 'raise') dy = amount;
+        else if (brushMode === 'lower') dy = -amount;
+        else if (brushMode === 'flatten') {
+            const targetY = hitPoint.y;
+            const currentY = tPos.getY(i);
+            dy = (targetY - currentY) * falloff * brushStrength * delta * 5;
+        }
+        else if (brushMode === 'smooth') {
+            // Average neighbors
+            let sum = 0, count = 0;
+            for (let j = Math.max(0, i - 122); j < Math.min(tPos.count, i + 122); j++) {
+                const nx = tPos.getX(j), nz = tPos.getZ(j);
+                if (Math.abs(nx - vx) < 2 && Math.abs(nz - vz) < 2) { sum += tPos.getY(j); count++; }
+            }
+            if (count > 0) dy = (sum / count - tPos.getY(i)) * falloff * brushStrength * delta * 5;
+        }
+
+        if (Math.abs(dy) > 0.001) {
+            tPos.setY(i, tPos.getY(i) + dy);
+            terrainDeltas[i] = (terrainDeltas[i] || 0) + dy;
+            changed = true;
+        }
+    }
+    if (changed) {
+        tPos.needsUpdate = true;
+        tGeo.computeVertexNormals();
+    }
+}
+
+// Mouse events for painting
+const paintRaycaster = new THREE.Raycaster();
+const paintMouse = new THREE.Vector2();
+let lastPaintTime = 0;
+
+renderer.domElement.addEventListener('pointerdown', e => {
+    if (!terrainMode || e.button !== 0) return;
+    pushUndo(); // save state before painting starts
+    isPainting = true;
+});
+renderer.domElement.addEventListener('pointerup', () => { isPainting = false; });
+renderer.domElement.addEventListener('pointermove', e => {
+    if (!terrainMode) return;
+    const rect = renderer.domElement.getBoundingClientRect();
+    paintMouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    paintMouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+});
+
+// T key toggle
+// (added to existing keydown handler below)
+
+// ============================================================
+// RENDER
+// ============================================================
+function resize() {
+    const w = window.innerWidth - 280, h = window.innerHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+}
+resize();
+addEventListener('resize', resize);
+
+let prevTime = performance.now();
+function animate() {
+    requestAnimationFrame(animate);
+    const now = performance.now();
+    const delta = (now - prevTime) / 1000;
+    prevTime = now;
+
+    orbit.update();
+    if (selectedId) updatePanelFromObject();
+
+    // Terrain brush: update cursor and paint
+    if (terrainMode) {
+        paintRaycaster.setFromCamera(paintMouse, camera);
+        const hits = paintRaycaster.intersectObject(terrainMesh);
+        if (hits.length > 0) {
+            brushCursor.position.copy(hits[0].point);
+            brushCursor.position.y += 0.1;
+            brushCursor.visible = true;
+            if (isPainting) {
+                sculptTerrain(hits[0].point, delta);
+            }
+        } else {
+            brushCursor.visible = false;
+        }
+        // Disable orbit when painting
+        if (isPainting) orbit.enabled = false;
+        else orbit.enabled = true;
+    }
+
+    renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

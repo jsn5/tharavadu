@@ -1,0 +1,211 @@
+# Optimized MTL for Three.js — fixed paths, realistic Kd fallback colors
+# Textures that exist get map_Kd/map_Bump; missing ones use Kd color only
+
+newmtl Asphalt
+Kd 0.25 0.25 0.25
+Ks 0.1 0.1 0.1
+Ns 100
+illum 2
+
+newmtl BedSheet
+Kd 0.85 0.82 0.78
+Ks 0.1 0.1 0.1
+Ns 50
+illum 2
+
+newmtl Blank
+Kd 0.02 0.02 0.02
+illum 1
+
+newmtl Blanket
+Kd 0.55 0.25 0.20
+Ks 0.05 0.05 0.05
+Ns 30
+illum 2
+
+newmtl Carpet
+Kd 0.8 0.8 0.8
+Ks 0.1 0.1 0.1
+Ns 30
+illum 2
+map_Kd textures/Fabric027_1K_Color.jpg
+map_Bump textures/Fabric027_1K_NormalGL.jpg
+
+newmtl FabricA
+Kd 0.65 0.30 0.15
+Ks 0.05 0.05 0.05
+Ns 30
+illum 2
+
+newmtl Floor
+Kd 0.55 0.35 0.25
+Ks 0.1 0.1 0.1
+Ns 100
+illum 2
+
+newmtl GlossWhite
+Kd 0.92 0.90 0.88
+Ks 0.4 0.4 0.4
+Ns 300
+illum 2
+
+newmtl Ground
+Kd 0.35 0.30 0.20
+Ks 0.01 0.01 0.01
+Ns 10
+illum 2
+
+newmtl LampFire
+Kd 0.95 0.75 0.30
+Ke 0.8 0.5 0.1
+Ns 10
+illum 2
+
+newmtl Marble
+Kd 0.8 0.8 0.8
+Ks 0.3 0.3 0.3
+Ns 200
+illum 2
+map_Kd textures/Marble016_1K_Color.jpg
+map_Bump textures/Marble016_1K_NormalGL.jpg
+
+newmtl MeshGrill
+Kd 0.15 0.15 0.15
+Ks 0.3 0.3 0.3
+Ns 200
+illum 2
+
+newmtl MetalA
+Kd 0.6 0.6 0.6
+Ks 0.5 0.5 0.5
+Ns 300
+illum 2
+map_Kd textures/Metal029_2K_Color.jpg
+map_Bump textures/Metal029_2K_Normal.jpg
+
+newmtl MetalB
+Kd 0.4 0.4 0.42
+Ks 0.5 0.5 0.5
+Ns 300
+illum 2
+
+newmtl PaintingA
+Kd 0.5 0.4 0.3
+Ns 500
+illum 2
+
+newmtl PaintingB
+Kd 0.4 0.35 0.3
+Ns 500
+illum 2
+
+newmtl Paving
+Kd 0.45 0.42 0.38
+Ks 0.1 0.1 0.1
+Ns 50
+illum 2
+
+newmtl Plastic
+Kd 0.3 0.3 0.3
+Ks 0.2 0.2 0.2
+Ns 200
+illum 2
+
+newmtl PlasticBlack
+Kd 0.05 0.05 0.05
+Ks 0.3 0.3 0.3
+Ns 300
+illum 2
+
+newmtl RoofTilesTexture
+Kd 0.55 0.28 0.15
+Ks 0.1 0.1 0.1
+Ns 50
+illum 2
+
+newmtl Steel
+Kd 0.72 0.72 0.72
+Ks 0.5 0.5 0.5
+Ns 400
+illum 3
+
+newmtl SteelBest
+Kd 0.65 0.65 0.67
+Ks 0.5 0.5 0.5
+Ns 400
+illum 2
+
+newmtl TVScreen
+Kd 0.01 0.01 0.01
+Ks 0.5 0.5 0.5
+Ns 900
+illum 2
+
+newmtl TransparentGlass
+Kd 0.85 0.90 0.92
+Ks 0.5 0.5 0.5
+Ns 500
+d 0.3
+illum 2
+
+newmtl TreeABark
+Kd 0.30 0.20 0.12
+Ks 0.05 0.05 0.05
+Ns 30
+illum 2
+
+newmtl TreeBranch
+Kd 0.25 0.18 0.10
+Ks 0.05 0.05 0.05
+Ns 20
+illum 2
+
+newmtl WallA
+Kd 0.88 0.84 0.78
+Ks 0.05 0.05 0.05
+Ns 30
+illum 2
+
+newmtl WallB
+Kd 0.82 0.78 0.72
+Ks 0.05 0.05 0.05
+Ns 30
+illum 2
+
+newmtl WallTiles
+Kd 0.8 0.8 0.8
+Ks 0.2 0.2 0.2
+Ns 100
+illum 2
+map_Kd textures/Tiles027_1K_Color.jpg
+map_Bump textures/Tiles027_1K_NormalGL.jpg
+
+newmtl WoodA
+Kd 0.6 0.4 0.25
+Ks 0.15 0.15 0.15
+Ns 100
+illum 2
+map_Kd textures/Wood035_2K_Color.jpg
+map_Bump textures/Wood035_2K_Normal.jpg
+
+newmtl WoodB
+Kd 0.50 0.35 0.20
+Ks 0.05 0.05 0.05
+Ns 50
+illum 2
+
+newmtl WoodPlanks
+Kd 0.45 0.32 0.18
+Ks 0.1 0.1 0.1
+Ns 50
+illum 2
+
+newmtl plant4
+Kd 0.25 0.45 0.15
+Ns 10
+illum 1
+
+newmtl plant5
+Kd 0.20 0.40 0.12
+Ns 10
+illum 1

@@ -1,0 +1,8 @@
+# Rock material
+newmtl default
+Kd 0.6 0.6 0.6
+Ks 0.1 0.1 0.1
+Ns 30
+illum 2
+map_Kd textures/rock_color.jpg
+map_Bump textures/rock_normal.jpg

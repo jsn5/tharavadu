@@ -1,0 +1,2042 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meenmutty Mala</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #000; }
+        canvas { display: block; }
+        #overlay {
+            position: absolute; inset: 0;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: rgba(10, 25, 10, 0.85);
+            color: #e8f5e9; cursor: pointer; z-index: 10;
+            backdrop-filter: blur(8px);
+        }
+        #overlay h1 { font-size: 32px; font-weight: 300; letter-spacing: 2px; margin-bottom: 8px; color: #c8e6c9; }
+        #overlay h2 { font-size: 16px; font-weight: 300; color: #81c784; margin-bottom: 28px; }
+        #overlay .start { font-size: 14px; color: #a5d6a7; padding: 10px 28px; border: 1px solid #4a6b4d; border-radius: 4px; }
+        #hud {
+            position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+            background: rgba(10, 25, 10, 0.5); color: rgba(165, 214, 167, 0.7);
+            padding: 6px 18px; border-radius: 4px; font-size: 12px;
+            pointer-events: none; display: none; backdrop-filter: blur(4px);
+        }
+    </style>
+</head>
+<body>
+<div id="overlay">
+    <h1>Meenmutty Mala</h1>
+    <h2>Western Ghats</h2>
+    <div class="start">Click to explore</div>
+</div>
+<div id="hud">ESC to pause &nbsp;|&nbsp; WASD move &nbsp;|&nbsp; SHIFT sprint &nbsp;|&nbsp; SPACE jump</div>
+
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/"
+    }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+import { Sky } from 'three/addons/objects/Sky.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+
+// ============================================================
+// PALETTE - Kerala Western Ghats
+// ============================================================
+const C = {
+    laterite: 0x7A3B1E, lateriteDark: 0x5C2D15, topSoil: 0x4A2E14, mud: 0x6B4226,
+    grass: 0x2D7B2E, grassMid: 0x3A8D38, grassLight: 0x4EAA42, grassDry: 0x6B9B4A,
+    undergrowth: 0x1E6A26, moss: 0x3B7B40, forestFloor: 0x2A4A2A,
+    wallWhite: 0xF2EDE4, wallBase: 0xD0C8B8, concrete: 0xB0A898, concreteEdge: 0x908070,
+    redBrick: 0xA04028, wood: 0x5A3518, woodFrame: 0x6B4423, redOxide: 0x8B3828,
+    rockLight: 0x7A7568, rockMid: 0x5E5A4E, rockDark: 0x4A4640, rockWarm: 0x6B6355,
+    coconutTrunk: 0x6B5D42, coconutLeaf: 0x1B6E30,
+    arecanutTrunk: 0x8E8A6E, arecanutLeaf: 0x258A3E,
+    mangoTrunk: 0x4E3524, mangoLeaf: 0x1A6A28, mangoDark: 0x0E4E1E,
+    teakTrunk: 0x6B5040, teakLeaf: 0x2E7B32, teakLeafLight: 0x4A9A4A,
+    jackfruitLeaf: 0x1E6E2A, plantainGreen: 0x3A9A3A, plantainStem: 0x6B9B5A,
+    well: 0x606060, water: 0x2288BB, path: 0x9A7A60,
+};
+
+// ============================================================
+// PROCEDURAL TEXTURES
+// ============================================================
+function makeTex(w, h, fn) {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    fn(ctx, w, h);
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    return t;
+}
+
+// Seeded random for texture consistency
+function tRand(seed) { let s = seed; return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; }; }
+
+const TEX = {};
+
+// Weathered white wall
+TEX.wall = makeTex(512, 512, (ctx, w, h) => {
+    ctx.fillStyle = '#F0EBE0'; ctx.fillRect(0, 0, w, h);
+    const rng = tRand(42);
+    // Plaster noise
+    for (let i = 0; i < 4000; i++) {
+        const v = 225 + rng() * 25;
+        ctx.fillStyle = `rgb(${v},${v - 4},${v - 12})`;
+        ctx.fillRect(rng() * w, rng() * h, 1 + rng() * 3, 1 + rng() * 3);
+    }
+    // Vertical water/rain stains from roof
+    for (let i = 0; i < 12; i++) {
+        const x = rng() * w, sw = 4 + rng() * 12;
+        const g = ctx.createLinearGradient(x, 0, x, h);
+        g.addColorStop(0, `rgba(70,80,60,${0.08 + rng() * 0.12})`);
+        g.addColorStop(0.4, `rgba(70,80,60,${0.03 + rng() * 0.06})`);
+        g.addColorStop(1, 'rgba(70,80,60,0)');
+        ctx.fillStyle = g; ctx.fillRect(x - sw / 2, 0, sw, h);
+    }
+    // Green moss/algae at bottom
+    const mg = ctx.createLinearGradient(0, h, 0, h * 0.55);
+    mg.addColorStop(0, 'rgba(50,85,40,0.35)'); mg.addColorStop(1, 'rgba(50,85,40,0)');
+    ctx.fillStyle = mg; ctx.fillRect(0, h * 0.55, w, h * 0.45);
+    // Horizontal crack lines
+    for (let i = 0; i < 5; i++) {
+        const y = 60 + rng() * (h - 120);
+        ctx.strokeStyle = `rgba(120,110,100,${0.15 + rng() * 0.15})`;
+        ctx.lineWidth = 0.5 + rng();
+        ctx.beginPath(); ctx.moveTo(rng() * w * 0.3, y);
+        ctx.lineTo(rng() * w * 0.3 + w * 0.4, y + (rng() - 0.5) * 8);
+        ctx.stroke();
+    }
+});
+TEX.wall.repeat.set(1, 1.5);
+
+// Wall bump map
+TEX.wallBump = makeTex(512, 512, (ctx, w, h) => {
+    ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, w, h);
+    const rng = tRand(99);
+    for (let i = 0; i < 6000; i++) {
+        const v = 118 + rng() * 20;
+        ctx.fillStyle = `rgb(${v},${v},${v})`;
+        ctx.fillRect(rng() * w, rng() * h, 1 + rng() * 2, 1 + rng() * 2);
+    }
+    // Rough patches
+    for (let i = 0; i < 15; i++) {
+        ctx.fillStyle = `rgba(${100 + rng() * 50},${100 + rng() * 50},${100 + rng() * 50},0.3)`;
+        ctx.beginPath();
+        ctx.arc(rng() * w, rng() * h, 8 + rng() * 25, 0, Math.PI * 2);
+        ctx.fill();
+    }
+});
+TEX.wallBump.repeat.set(1, 1.5);
+
+// Concrete texture
+TEX.concrete = makeTex(256, 256, (ctx, w, h) => {
+    ctx.fillStyle = '#A8A090'; ctx.fillRect(0, 0, w, h);
+    const rng = tRand(77);
+    for (let i = 0; i < 3000; i++) {
+        const v = 150 + rng() * 30;
+        ctx.fillStyle = `rgb(${v},${v - 4},${v - 8})`;
+        ctx.fillRect(rng() * w, rng() * h, 1 + rng() * 4, 1 + rng() * 2);
+    }
+    // Dark weathering spots
+    for (let i = 0; i < 20; i++) {
+        ctx.fillStyle = `rgba(60,55,50,${0.05 + rng() * 0.1})`;
+        ctx.beginPath(); ctx.arc(rng() * w, rng() * h, 5 + rng() * 15, 0, Math.PI * 2); ctx.fill();
+    }
+});
+
+// Wood grain texture
+TEX.wood = makeTex(256, 512, (ctx, w, h) => {
+    ctx.fillStyle = '#5A3518'; ctx.fillRect(0, 0, w, h);
+    const rng = tRand(33);
+    // Grain lines (horizontal = along plank)
+    for (let y = 0; y < h; y += 2) {
+        const v = 70 + rng() * 30;
+        ctx.strokeStyle = `rgba(${v},${v * 0.6},${v * 0.3},${0.15 + rng() * 0.2})`;
+        ctx.lineWidth = 0.5 + rng() * 1.5;
+        ctx.beginPath(); ctx.moveTo(0, y + (rng() - 0.5) * 2);
+        ctx.lineTo(w, y + (rng() - 0.5) * 4); ctx.stroke();
+    }
+    // Knots
+    for (let i = 0; i < 3; i++) {
+        const kx = 30 + rng() * (w - 60), ky = 50 + rng() * (h - 100);
+        const kr = 6 + rng() * 10;
+        for (let r = kr; r > 0; r -= 1.5) {
+            ctx.strokeStyle = `rgba(40,22,8,${0.1 + (kr - r) / kr * 0.3})`;
+            ctx.lineWidth = 1; ctx.beginPath();
+            ctx.ellipse(kx, ky, r, r * 0.7, rng() * 0.3, 0, Math.PI * 2); ctx.stroke();
+        }
+    }
+});
+
+// Brick texture
+TEX.brick = makeTex(256, 256, (ctx, w, h) => {
+    const bw = 32, bh = 16, gap = 2;
+    ctx.fillStyle = '#806050'; ctx.fillRect(0, 0, w, h);
+    const rng = tRand(55);
+    for (let row = 0; row < h / (bh + gap); row++) {
+        const offset = (row % 2) * bw / 2;
+        for (let col = -1; col < w / (bw + gap) + 1; col++) {
+            const bx = col * (bw + gap) + offset, by = row * (bh + gap);
+            const r = 140 + rng() * 30, g = 50 + rng() * 20, b = 30 + rng() * 15;
+            ctx.fillStyle = `rgb(${r},${g},${b})`;
+            ctx.fillRect(bx, by, bw, bh);
+            // Surface variation
+            for (let i = 0; i < 8; i++) {
+                ctx.fillStyle = `rgba(${r + 20},${g + 10},${b + 5},0.3)`;
+                ctx.fillRect(bx + rng() * bw, by + rng() * bh, rng() * 8, rng() * 4);
+            }
+        }
+    }
+});
+
+// Red oxide floor
+TEX.redOxide = makeTex(256, 256, (ctx, w, h) => {
+    ctx.fillStyle = '#8B3828'; ctx.fillRect(0, 0, w, h);
+    const rng = tRand(88);
+    for (let i = 0; i < 2000; i++) {
+        const v = rng() > 0.5 ? 150 + rng() * 20 : 120 + rng() * 20;
+        ctx.fillStyle = `rgba(${v},${v * 0.35},${v * 0.25},0.15)`;
+        ctx.fillRect(rng() * w, rng() * h, 2 + rng() * 5, 1 + rng() * 3);
+    }
+    // Smooth polish reflections
+    for (let i = 0; i < 8; i++) {
+        const g = ctx.createRadialGradient(rng() * w, rng() * h, 0, rng() * w, rng() * h, 20 + rng() * 30);
+        g.addColorStop(0, 'rgba(180,80,60,0.08)'); g.addColorStop(1, 'rgba(180,80,60,0)');
+        ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+    }
+});
+
+// Coconut bark (ring marks)
+TEX.bark = makeTex(128, 512, (ctx, w, h) => {
+    ctx.fillStyle = '#6B5D42'; ctx.fillRect(0, 0, w, h);
+    const rng = tRand(22);
+    // Horizontal ring marks
+    for (let y = 0; y < h; y += 6 + rng() * 4) {
+        ctx.strokeStyle = `rgba(50,42,28,${0.3 + rng() * 0.3})`;
+        ctx.lineWidth = 1 + rng() * 2;
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y + (rng() - 0.5) * 2); ctx.stroke();
+        // Light edge below ring
+        ctx.strokeStyle = `rgba(140,120,85,${0.15 + rng() * 0.15})`;
+        ctx.lineWidth = 0.5;
+        ctx.beginPath(); ctx.moveTo(0, y + 2); ctx.lineTo(w, y + 2); ctx.stroke();
+    }
+    // Vertical fiber texture
+    for (let i = 0; i < 200; i++) {
+        ctx.strokeStyle = `rgba(80,68,45,${0.1 + rng() * 0.15})`;
+        ctx.lineWidth = 0.5;
+        const x = rng() * w;
+        ctx.beginPath(); ctx.moveTo(x, rng() * h); ctx.lineTo(x + (rng() - 0.5) * 3, rng() * h); ctx.stroke();
+    }
+});
+TEX.bark.repeat.set(1, 2);
+
+// Glass texture (subtle reflections)
+TEX.glass = makeTex(64, 64, (ctx, w, h) => {
+    ctx.fillStyle = '#7ABCD4'; ctx.fillRect(0, 0, w, h);
+    const g = ctx.createLinearGradient(0, 0, w, h);
+    g.addColorStop(0, 'rgba(200,230,255,0.15)'); g.addColorStop(0.5, 'rgba(200,230,255,0)');
+    g.addColorStop(1, 'rgba(200,230,255,0.1)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+});
+
+// Terrain grass/dirt texture
+TEX.terrain = makeTex(512, 512, (ctx, w, h) => {
+    // Base brown laterite earth
+    ctx.fillStyle = '#7A5A3A'; ctx.fillRect(0, 0, w, h);
+    const rng = tRand(111);
+    // Earth texture strokes — dirt, clay, dried mud
+    for (let i = 0; i < 6000; i++) {
+        const x = rng() * w, y = rng() * h;
+        const shade = rng();
+        if (shade > 0.6) {
+            // Light sandy patches
+            const v = 140 + rng() * 50;
+            ctx.fillStyle = `rgba(${v},${v * 0.72},${v * 0.45},${0.15 + rng() * 0.2})`;
+        } else if (shade > 0.3) {
+            // Red laterite flecks
+            const r = 130 + rng() * 50;
+            ctx.fillStyle = `rgba(${r},${r * 0.55},${r * 0.3},${0.12 + rng() * 0.18})`;
+        } else {
+            // Dark earth
+            const v = 60 + rng() * 40;
+            ctx.fillStyle = `rgba(${v},${v * 0.7},${v * 0.5},${0.15 + rng() * 0.2})`;
+        }
+        ctx.fillRect(x, y, 1 + rng() * 4, 1 + rng() * 3);
+    }
+    // Cracks and texture lines
+    for (let i = 0; i < 40; i++) {
+        const x = rng() * w, y = rng() * h;
+        ctx.strokeStyle = `rgba(${50 + rng() * 30},${35 + rng() * 20},${20 + rng() * 15},${0.08 + rng() * 0.1})`;
+        ctx.lineWidth = 0.3 + rng() * 0.8;
+        ctx.beginPath(); ctx.moveTo(x, y);
+        ctx.lineTo(x + (rng() - 0.5) * 20, y + (rng() - 0.5) * 8);
+        ctx.stroke();
+    }
+    // Small pebbles/gravel
+    for (let i = 0; i < 300; i++) {
+        const v = 90 + rng() * 70;
+        ctx.fillStyle = `rgba(${v},${v * 0.8},${v * 0.6},${0.15 + rng() * 0.2})`;
+        ctx.beginPath();
+        ctx.arc(rng() * w, rng() * h, 0.4 + rng() * 1.2, 0, Math.PI * 2);
+        ctx.fill();
+    }
+});
+TEX.terrain.repeat.set(12, 12);
+
+// ============================================================
+// SCENE
+// ============================================================
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x81908a, 20, 130); // misty Western Ghats
+const clock = new THREE.Clock();
+
+const windTargets = { coconuts: [], plantains: [] };
+
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.3, 600);
+camera.position.set(0, 5, 15);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+document.body.appendChild(renderer.domElement);
+
+// ============================================================
+// FIRST-PERSON CONTROLS
+// ============================================================
+const controls = new PointerLockControls(camera, document.body);
+controls.minPolarAngle = Math.PI * 0.1;  // can't look straight up
+controls.maxPolarAngle = Math.PI * 0.9;  // can't look straight down
+const overlay = document.getElementById('overlay');
+const hud = document.getElementById('hud');
+
+overlay.addEventListener('click', () => controls.lock());
+controls.addEventListener('lock', () => { overlay.style.display = 'none'; hud.style.display = 'block'; });
+controls.addEventListener('unlock', () => { overlay.style.display = 'flex'; hud.style.display = 'none'; });
+
+const moveState = { forward: false, backward: false, left: false, right: false, sprint: false, jump: false };
+const velocity = new THREE.Vector3();
+const direction = new THREE.Vector3();
+const WALK_SPEED = 4, SPRINT_SPEED = 7, DECEL = 12;
+const MAX_VELOCITY = 7;
+
+// Walking feel
+let stepCycle = 0;
+let smoothY = 0;
+let smoothYInit = false;
+const HEAD_BOB_FREQ = 5;
+const HEAD_BOB_AMP = 0.015;
+const HEAD_BOB_AMP_SPRINT = 0.022;
+const Y_SMOOTH_SPEED = 8;
+const EYE_HEIGHT = 2.2;
+
+// Jump
+let verticalVelocity = 0;
+let isOnGround = true;
+const GRAVITY = 20;
+const JUMP_FORCE = 7;
+
+// Collision obstacles: array of { x, z, r } cylinders
+const colliders = [];
+
+function registerCollider(x, z, r) {
+    colliders.push({ x, z, r: r + 0.3 });
+}
+
+function checkColliders(px, pz) {
+    for (const c of colliders) {
+        const dx = px - c.x, dz = pz - c.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        if (dist < c.r) {
+            // Push out along the vector from center to player
+            const nx = dx / dist, nz = dz / dist;
+            return { x: c.x + nx * c.r, z: c.z + nz * c.r };
+        }
+    }
+    return null;
+}
+
+document.addEventListener('keydown', e => {
+    switch (e.code) {
+        case 'KeyW': case 'ArrowUp':    moveState.forward = true; break;
+        case 'KeyS': case 'ArrowDown':  moveState.backward = true; break;
+        case 'KeyA': case 'ArrowLeft':  moveState.left = true; break;
+        case 'KeyD': case 'ArrowRight': moveState.right = true; break;
+        case 'ShiftLeft': case 'ShiftRight': moveState.sprint = true; break;
+        case 'Space': moveState.jump = true; break;
+    }
+});
+document.addEventListener('keyup', e => {
+    switch (e.code) {
+        case 'KeyW': case 'ArrowUp':    moveState.forward = false; break;
+        case 'KeyS': case 'ArrowDown':  moveState.backward = false; break;
+        case 'KeyA': case 'ArrowLeft':  moveState.left = false; break;
+        case 'KeyD': case 'ArrowRight': moveState.right = false; break;
+        case 'ShiftLeft': case 'ShiftRight': moveState.sprint = false; break;
+        case 'Space': moveState.jump = false; break;
+        case 'KeyV': if (glbScene) glbScene.visible = !glbScene.visible; break;
+        case 'KeyF':
+            scene.traverse(c => { if (c.isMesh && c.material) {
+                (Array.isArray(c.material) ? c.material : [c.material]).forEach(m => m.wireframe = !m.wireframe);
+            }});
+            break;
+    }
+});
+
+// House collision — updated dynamically when house model loads
+let houseAABB = null; // set after house loads
+
+// No retaining walls — natural terrain slopes
+function checkRetainingWalls() { return null; }
+
+function updateMovement(delta) {
+    if (!controls.isLocked) return;
+    const sprinting = moveState.sprint;
+    const speed = sprinting ? SPRINT_SPEED : WALK_SPEED;
+
+    direction.z = Number(moveState.forward) - Number(moveState.backward);
+    direction.x = Number(moveState.right) - Number(moveState.left);
+    const isMoving = direction.length() > 0;
+    direction.normalize();
+
+    // Acceleration / deceleration
+    if (moveState.forward || moveState.backward) velocity.z -= direction.z * speed * delta;
+    else velocity.z -= velocity.z * DECEL * delta;
+
+    if (moveState.left || moveState.right) velocity.x -= direction.x * speed * delta;
+    else velocity.x -= velocity.x * DECEL * delta;
+
+    // Clamp velocity to prevent runaway speed
+    const vMag = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
+    if (vMag > MAX_VELOCITY) {
+        velocity.x *= MAX_VELOCITY / vMag;
+        velocity.z *= MAX_VELOCITY / vMag;
+    }
+
+    const pos = camera.position;
+
+    controls.moveRight(-velocity.x * delta);
+    controls.moveForward(-velocity.z * delta);
+
+    // House AABB collision (dynamically set when house loads)
+    if (houseAABB) {
+        const pad = 0.5; // player body radius
+        const hb = houseAABB;
+        if (pos.x > hb.minX - pad && pos.x < hb.maxX + pad &&
+            pos.z > hb.minZ - pad && pos.z < hb.maxZ + pad) {
+            const dists = [
+                { axis: 'x', val: hb.minX - pad, d: Math.abs(pos.x - (hb.minX - pad)) },
+                { axis: 'x', val: hb.maxX + pad, d: Math.abs(pos.x - (hb.maxX + pad)) },
+                { axis: 'z', val: hb.minZ - pad, d: Math.abs(pos.z - (hb.minZ - pad)) },
+                { axis: 'z', val: hb.maxZ + pad, d: Math.abs(pos.z - (hb.maxZ + pad)) },
+            ];
+            dists.sort((a, b) => a.d - b.d);
+            pos[dists[0].axis] = dists[0].val;
+            velocity.x *= 0.2; velocity.z *= 0.2;
+        }
+    }
+
+    // Retaining wall collision
+    const wallPush = checkRetainingWalls(pos.x, pos.z);
+    if (wallPush) {
+        pos.x = wallPush.x;
+        pos.z = wallPush.z;
+        velocity.x *= 0.2;
+    }
+
+    // Cylinder colliders (trees, well, rocks)
+    const push = checkColliders(pos.x, pos.z);
+    if (push) {
+        pos.x = push.x;
+        pos.z = push.z;
+        velocity.x *= 0.2; velocity.z *= 0.2;
+    }
+
+    // World bounds
+    pos.x = Math.max(-85, Math.min(85, pos.x));
+    pos.z = Math.max(-85, Math.min(85, pos.z));
+
+    // Ground height at current position
+    const groundY = walkableHeight(pos.x, pos.z) + EYE_HEIGHT;
+    if (!smoothYInit) { smoothY = groundY; smoothYInit = true; }
+    // Prevent smooth Y from lagging too far behind (max 2m difference)
+    if (Math.abs(smoothY - groundY) > 2) smoothY = groundY;
+
+    // Jump physics
+    if (moveState.jump && isOnGround) {
+        verticalVelocity = JUMP_FORCE;
+        isOnGround = false;
+    }
+
+    if (!isOnGround) {
+        verticalVelocity -= GRAVITY * delta;
+        smoothY += verticalVelocity * delta;
+        if (smoothY <= groundY) {
+            smoothY = groundY;
+            verticalVelocity = 0;
+            isOnGround = true;
+        }
+    } else {
+        // Smooth terrain following when on ground
+        smoothY += (groundY - smoothY) * Math.min(1, Y_SMOOTH_SPEED * delta);
+    }
+
+    // Head bob (only when on ground and moving)
+    const moveSpeed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
+    if (isOnGround && isMoving && moveSpeed > 0.3) {
+        stepCycle += delta * HEAD_BOB_FREQ * (sprinting ? 1.2 : 1.0);
+        const bobAmp = sprinting ? HEAD_BOB_AMP_SPRINT : HEAD_BOB_AMP;
+        pos.y = smoothY + Math.sin(stepCycle * Math.PI * 2) * bobAmp;
+    } else {
+        if (stepCycle > 0) stepCycle *= 0.8;
+        pos.y = smoothY;
+    }
+}
+
+// ============================================================
+// LIGHTING - tropical Kerala afternoon
+// ============================================================
+scene.add(new THREE.AmbientLight(0x607060, 0.45));
+const sun = new THREE.DirectionalLight(0xFFF3E0, 1.0);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -80, right: 80, top: 80, bottom: -80, far: 180 });
+sun.shadow.bias = -0.001;
+scene.add(sun);
+scene.add(new THREE.DirectionalLight(0x8090A0, 0.15).translateX(-20).translateY(15).translateZ(-10));
+scene.add(new THREE.HemisphereLight(0xaabbaa, 0x5a4a3a, 0.75));
+
+// ============================================================
+// SKY SYSTEM
+// ============================================================
+const sky = new Sky();
+sky.scale.setScalar(10000);
+scene.add(sky);
+
+const skyUniforms = sky.material.uniforms;
+skyUniforms['turbidity'].value = 8;
+skyUniforms['rayleigh'].value = 1.5;
+skyUniforms['mieCoefficient'].value = 0.005;
+skyUniforms['mieDirectionalG'].value = 0.8;
+
+const sunElevation = 45 * Math.PI / 180;
+const sunAzimuth = 240 * Math.PI / 180;
+const sunPosition = new THREE.Vector3();
+sunPosition.setFromSphericalCoords(1, Math.PI / 2 - sunElevation, sunAzimuth);
+skyUniforms['sunPosition'].value.copy(sunPosition);
+
+// Align sun light to sky sun
+sun.position.copy(sunPosition).multiplyScalar(50);
+
+// Use fog color as background (matches editor look — no bright sky env map washing out materials)
+scene.background = new THREE.Color(0x81908a);
+
+// ============================================================
+// NOISE
+// ============================================================
+function hash2D(x, z) { let n = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return n - Math.floor(n); }
+function smoothNoise(x, z) {
+    const ix = Math.floor(x), iz = Math.floor(z), fx = x - ix, fz = z - iz;
+    const ux = fx * fx * (3 - 2 * fx), uz = fz * fz * (3 - 2 * fz);
+    const a = hash2D(ix, iz), b = hash2D(ix + 1, iz), c = hash2D(ix, iz + 1), d = hash2D(ix + 1, iz + 1);
+    return a + (b - a) * ux + (c - a) * uz + (a - b - c + d) * ux * uz;
+}
+function fbm(x, z, oct = 4) {
+    let v = 0, a = 1, f = 1, t = 0;
+    for (let i = 0; i < oct; i++) { v += a * smoothNoise(x * f, z * f); t += a; a *= 0.5; f *= 2; }
+    return v / t;
+}
+
+// ============================================================
+// KERALA HOUSE (procedural, from reference model)
+// ============================================================
+function createKeralaHouse() {
+// ── Materials ──
+const whitePlaster = new THREE.MeshStandardMaterial({ color: 0xf5f0e8, roughness: 0.85 });
+const concrete = new THREE.MeshStandardMaterial({ color: 0xb0aaa0, roughness: 0.9 });
+const concreteDark = new THREE.MeshStandardMaterial({ color: 0x908880, roughness: 0.95 });
+const woodDoor = new THREE.MeshStandardMaterial({ color: 0x5c3a1e, roughness: 0.6, metalness: 0.05 });
+const woodWindow = new THREE.MeshStandardMaterial({ color: 0xb07030, roughness: 0.5, metalness: 0.05 });
+const glassMat = new THREE.MeshStandardMaterial({ color: 0xc8dce8, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.4 });
+const roofMat = new THREE.MeshStandardMaterial({ color: 0xe8e2d8, roughness: 0.7 });
+const frameMat = new THREE.MeshStandardMaterial({ color: 0x3a2010, roughness: 0.6 });
+const floorTile = new THREE.MeshStandardMaterial({ color: 0xc4a882, roughness: 0.7 });
+const storageShadow = new THREE.MeshStandardMaterial({ color: 0x3a3530, roughness: 1.0 }); // dark recess
+
+// Brick texture
+const brickCanvas = document.createElement('canvas');
+brickCanvas.width = 256; brickCanvas.height = 256;
+const bCtx = brickCanvas.getContext('2d');
+bCtx.fillStyle = '#c45a3a';
+bCtx.fillRect(0, 0, 256, 256);
+for (let row = 0; row < 16; row++) {
+  for (let col = 0; col < 8; col++) {
+    const x = col * 32 + (row % 2 === 0 ? 0 : 16);
+    const y = row * 16;
+    bCtx.fillStyle = `rgb(${170+Math.random()*40},${70+Math.random()*30},${40+Math.random()*20})`;
+    bCtx.fillRect(x + 1, y + 1, 30, 14);
+  }
+}
+const brickTex = new THREE.CanvasTexture(brickCanvas);
+brickTex.wrapS = brickTex.wrapT = THREE.RepeatWrapping;
+const brickMat = new THREE.MeshStandardMaterial({ map: brickTex, roughness: 0.85 });
+
+// ── Helpers ──
+function box(w, h, d, mat) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  m.castShadow = true; m.receiveShadow = true;
+  return m;
+}
+function posBox(w, h, d, mat, x, y, z) {
+  const m = box(w, h, d, mat); m.position.set(x, y, z); return m;
+}
+
+const house = new THREE.Group();
+
+// ══════════════════════════════════════════
+// DIMENSIONS
+// ══════════════════════════════════════════
+// Coordinate system: +Z = front, +X = right when facing house
+const floorH = 0.8;       // plinth/platform height
+const wallH = 2.8;        // wall height above platform
+const wallT = 0.15;       // wall thickness
+const mainW = 7.0;        // main building width
+const mainD = 9.0;        // main building depth
+const storeW = 2.0;       // storeroom width
+const sitoutW = 3.0;      // sit-out width (left portion)
+const sitoutD = 2.2;      // sit-out projection depth forward
+const platThick = 0.12;   // platform slab thickness
+const storageH = floorH - platThick; // open space height below platform
+
+// Key X positions (left edge = -mainW/2 = -3.5)
+const leftEdge = -mainW / 2;          // -3.5
+const sitoutRightEdge = leftEdge + sitoutW; // -0.5
+const rightEdge = mainW / 2;          // 3.5
+
+// Key Z positions
+const frontZ = mainD / 2;             // 3.0  (main front wall)
+const backZ = -mainD / 2;             // -3.0
+const sitoutFrontZ = frontZ + sitoutD; // 5.2  (sit-out front edge)
+
+// ══════════════════════════════════════════
+// PLATFORM & STORAGE
+// ══════════════════════════════════════════
+// Solid concrete foundation - fills interior, inset from front/sides for storage
+const foundationInset = 0.4;
+const foundFrontZ = sitoutFrontZ - 0.5; // foundation stops 0.5 back from front edge
+house.add(posBox(mainW - foundationInset * 2, floorH, (foundFrontZ - backZ), concrete,
+  0, floorH / 2, (foundFrontZ + backZ) / 2));
+
+// -- Platform slabs (thin, extend over storage to edges) --
+house.add(posBox(mainW, platThick, mainD, concrete, 0, floorH - platThick/2, 0));
+house.add(posBox(sitoutW, platThick, sitoutD, concrete,
+  leftEdge + sitoutW/2, floorH - platThick/2, frontZ + sitoutD/2));
+
+// -- Front supports: sit-out --
+// Aligned at sitoutFrontZ, flush with platform front edge
+const supH = floorH - platThick; // height of open storage space
+const supW = 0.15;
+house.add(posBox(supW, supH, supW, concreteDark, leftEdge + 0.15, supH/2, sitoutFrontZ));
+house.add(posBox(supW, supH, supW, concreteDark, sitoutRightEdge - 0.15, supH/2, sitoutFrontZ));
+// Mid support under sit-out front
+house.add(posBox(supW, supH, supW, concreteDark, leftEdge + sitoutW/2, supH/2, sitoutFrontZ));
+
+// -- Side supports: left wall -- (defined after left wall section below)
+
+// -- Side supports: right wall -- (defined after right wall section below)
+
+// -- Platform edge lip --
+house.add(posBox(sitoutW, 0.08, 0.08, concrete,
+  leftEdge + sitoutW/2, floorH + 0.01, sitoutFrontZ + 0.04));
+house.add(posBox(rightEdge - sitoutRightEdge - 0.15, 0.08, 0.08, concrete,
+  sitoutRightEdge + 0.15 + (rightEdge - sitoutRightEdge - 0.15)/2, floorH + 0.01, sitoutFrontZ + 0.04));
+
+
+// ══════════════════════════════════════════
+// STOREROOM PLINTH (keep as solid - item 5)
+// ══════════════════════════════════════════
+const storeX = rightEdge + storeW / 2;
+// Storeroom moved forward: bottom step aligns with sitoutFrontZ
+const storeDepth = 4.5;
+const storeFrontZ = sitoutFrontZ - 0.3 - 3 * 0.28; // bottom step at sitoutFrontZ
+const storeBackZ = storeFrontZ - storeDepth;
+const storeCenterZ = (storeFrontZ + storeBackZ) / 2;
+house.add(posBox(storeW, floorH, storeDepth, concrete,
+  storeX, floorH / 2, storeCenterZ));
+
+
+// ══════════════════════════════════════════
+// WALLS
+// ══════════════════════════════════════════
+const wallBase = floorH;
+
+// -- Back wall (with door) --
+const backDoorW = 0.9;
+const backDoorH = 2.2;
+const backDoorX = 0; // centered on back wall
+
+// Wall segment left of back door
+const backLeftW = (backDoorX - backDoorW/2) - leftEdge;
+house.add(posBox(backLeftW, wallH, wallT, whitePlaster,
+  leftEdge + backLeftW/2, wallBase + wallH/2, backZ));
+
+// Wall segment right of back door
+const backRightStart = backDoorX + backDoorW/2;
+const backRightW = rightEdge - backRightStart;
+house.add(posBox(backRightW, wallH, wallT, whitePlaster,
+  backRightStart + backRightW/2, wallBase + wallH/2, backZ));
+
+// Wall segment above back door
+house.add(posBox(backDoorW + 0.1, wallH - backDoorH, wallT, whitePlaster,
+  backDoorX, wallBase + backDoorH + (wallH - backDoorH)/2, backZ));
+
+// Back door frame
+house.add(posBox(backDoorW + 0.12, 0.06, 0.2, frameMat,
+  backDoorX, wallBase + backDoorH, backZ - 0.02));
+house.add(posBox(0.06, backDoorH, 0.2, frameMat,
+  backDoorX - backDoorW/2 - 0.03, wallBase + backDoorH/2, backZ - 0.02));
+house.add(posBox(0.06, backDoorH, 0.2, frameMat,
+  backDoorX + backDoorW/2 + 0.03, wallBase + backDoorH/2, backZ - 0.02));
+
+// Back door panel
+house.add(posBox(backDoorW, backDoorH, 0.05, woodDoor,
+  backDoorX, wallBase + backDoorH/2, backZ - 0.05));
+
+// -- Left wall: inset with platform ledge (same pattern as front room) --
+const leftSetback = 0.7;
+const leftWallX = leftEdge + leftSetback; // wall pushed inward
+const leftWinH = 1.6; // same as front window
+const leftWinW = 2.2;
+const leftWinBaseY = wallBase + 0.9;
+
+// Window centers along Z
+const leftWin1Z = -1.5; // back room window
+const leftWin2Z = 1.5;  // front room window
+const leftSepZ = 0;     // separation between windows
+
+// Wall segments around windows (at x = leftWallX, oriented along Z)
+// Segment 1: backZ to first window
+const seg1Start = backZ;
+const seg1End = leftWin1Z - leftWinW/2;
+const seg1Len = seg1End - seg1Start;
+house.add(posBox(wallT, wallH, seg1Len, whitePlaster,
+  leftWallX, wallBase + wallH/2, seg1Start + seg1Len/2));
+
+// Segment 2: between windows (gap between win1 and win2)
+const seg2Start = leftWin1Z + leftWinW/2;
+const seg2End = leftWin2Z - leftWinW/2;
+const seg2Len = seg2End - seg2Start;
+house.add(posBox(wallT, wallH, seg2Len, whitePlaster,
+  leftWallX, wallBase + wallH/2, seg2Start + seg2Len/2));
+
+// Segment 3: after second window to frontZ
+const seg3Start = leftWin2Z + leftWinW/2;
+const seg3End = frontZ;
+const seg3Len = seg3End - seg3Start;
+house.add(posBox(wallT, wallH, seg3Len, whitePlaster,
+  leftWallX, wallBase + wallH/2, seg3Start + seg3Len/2));
+
+// Below each window
+house.add(posBox(wallT, leftWinBaseY - wallBase, leftWinW, whitePlaster,
+  leftWallX, wallBase + (leftWinBaseY - wallBase)/2, leftWin1Z));
+house.add(posBox(wallT, leftWinBaseY - wallBase, leftWinW, whitePlaster,
+  leftWallX, wallBase + (leftWinBaseY - wallBase)/2, leftWin2Z));
+
+// Above each window
+const leftAboveH = wallH - (leftWinBaseY - wallBase + leftWinH);
+house.add(posBox(wallT, leftAboveH, leftWinW, whitePlaster,
+  leftWallX, leftWinBaseY + leftWinH + leftAboveH/2, leftWin1Z));
+house.add(posBox(wallT, leftAboveH, leftWinW, whitePlaster,
+  leftWallX, leftWinBaseY + leftWinH + leftAboveH/2, leftWin2Z));
+
+// -- Left side pillar/walls (run from wall to platform edge, like front room) --
+const leftPillarW = 0.22;
+// Back pillar/wall
+house.add(posBox(leftSetback + 0.1, wallH, leftPillarW, whitePlaster,
+  leftWallX - (leftSetback + 0.1)/2, wallBase + wallH/2, backZ));
+// Separation pillar/wall between windows at z=0
+house.add(posBox(leftSetback + 0.1, wallH, leftPillarW, whitePlaster,
+  leftWallX - (leftSetback + 0.1)/2, wallBase + wallH/2, leftSepZ));
+// Front pillar/wall
+house.add(posBox(leftSetback + 0.1, wallH, leftPillarW, whitePlaster,
+  leftWallX - (leftSetback + 0.1)/2, wallBase + wallH/2, frontZ));
+
+// -- Left side platform slab (extends from wall to original leftEdge) --
+house.add(posBox(leftSetback, platThick, mainD, concrete,
+  leftEdge + leftSetback/2, floorH - platThick/2, 0));
+
+// -- Left side platform edge lip --
+house.add(posBox(0.08, 0.08, mainD, concrete,
+  leftEdge - 0.04, floorH + 0.01, 0));
+
+// -- Left side support beams below (aligned with pillar/walls above) --
+const leftBeamLen = leftSetback;
+const leftBeamCenterX = leftWallX - leftBeamLen/2;
+// Back beam
+house.add(posBox(leftBeamLen, supH, supW, concreteDark,
+  leftBeamCenterX, supH/2, backZ));
+// Separation beam (between windows, at z=0)
+house.add(posBox(leftBeamLen, supH, supW, concreteDark,
+  leftBeamCenterX, supH/2, leftSepZ));
+// Front beam
+house.add(posBox(leftBeamLen, supH, supW, concreteDark,
+  leftBeamCenterX, supH/2, frontZ));
+// Edge supports at leftEdge
+house.add(posBox(supW, supH, supW, concreteDark,
+  leftEdge + 0.05, supH/2, backZ));
+house.add(posBox(supW, supH, supW, concreteDark,
+  leftEdge + 0.05, supH/2, leftSepZ));
+house.add(posBox(supW, supH, supW, concreteDark,
+  leftEdge + 0.05, supH/2, frontZ));
+
+// -- Right wall: inset with platform ledge (same pattern as left side) --
+const rightSetback = 0.7;
+const rightWallX = rightEdge - rightSetback; // wall pushed inward
+const rightWinZ = 0; // single centered window
+
+// Wall segments around single centered window (at x = rightWallX)
+// Segment: backZ to window start
+const rSeg1End = rightWinZ - leftWinW/2;
+const rSeg1Len = rSeg1End - backZ;
+house.add(posBox(wallT, wallH, rSeg1Len, whitePlaster,
+  rightWallX, wallBase + wallH/2, backZ + rSeg1Len/2));
+
+// Segment: window end to frontZ
+const rSeg2Start = rightWinZ + leftWinW/2;
+const rSeg2Len = frontZ - rSeg2Start;
+house.add(posBox(wallT, wallH, rSeg2Len, whitePlaster,
+  rightWallX, wallBase + wallH/2, rSeg2Start + rSeg2Len/2));
+
+// Below window
+house.add(posBox(wallT, leftWinBaseY - wallBase, leftWinW, whitePlaster,
+  rightWallX, wallBase + (leftWinBaseY - wallBase)/2, rightWinZ));
+
+// Above window
+house.add(posBox(wallT, leftAboveH, leftWinW, whitePlaster,
+  rightWallX, leftWinBaseY + leftWinH + leftAboveH/2, rightWinZ));
+
+// -- Right side pillar/walls (run from wall to platform edge) --
+// Back pillar/wall
+house.add(posBox(rightSetback + 0.1, wallH, leftPillarW, whitePlaster,
+  rightWallX + (rightSetback + 0.1)/2, wallBase + wallH/2, backZ));
+// Front pillar/wall
+house.add(posBox(rightSetback + 0.1, wallH, leftPillarW, whitePlaster,
+  rightWallX + (rightSetback + 0.1)/2, wallBase + wallH/2, frontZ));
+
+// -- Right side platform slab --
+house.add(posBox(rightSetback, platThick, mainD, concrete,
+  rightEdge - rightSetback/2, floorH - platThick/2, 0));
+
+// -- Right side platform edge lip --
+house.add(posBox(0.08, 0.08, mainD, concrete,
+  rightEdge + 0.04, floorH + 0.01, 0));
+
+// -- Right side support beams below (aligned with pillar/walls above) --
+const rightBeamLen = rightSetback;
+const rightBeamCenterX = rightWallX + rightBeamLen/2;
+// Back beam
+house.add(posBox(rightBeamLen, supH, supW, concreteDark,
+  rightBeamCenterX, supH/2, backZ));
+// Front beam
+house.add(posBox(rightBeamLen, supH, supW, concreteDark,
+  rightBeamCenterX, supH/2, frontZ));
+// Edge supports at rightEdge
+house.add(posBox(supW, supH, supW, concreteDark,
+  rightEdge - 0.05, supH/2, backZ));
+house.add(posBox(supW, supH, supW, concreteDark,
+  rightEdge - 0.05, supH/2, frontZ));
+
+// -- Front wall: sit-out back wall (item 3) --
+// This wall is the back of the sit-out, which is the main front wall
+// but it starts slightly recessed (0.3 inward) on the sit-out portion
+// Room protrudes forward to sitoutFrontZ (same front line as sit-out)
+
+// Sit-out back wall: left of entrance door
+// The entrance door is near the right edge of sit-out
+const doorW = 0.9;
+const doorH = 2.2;
+const doorCenterX = sitoutRightEdge - 0.6; // door near right side of sitout
+// Wall segment left of door
+const leftWallW = (doorCenterX - doorW/2) - leftEdge;
+if (leftWallW > 0.05) {
+  house.add(posBox(leftWallW, wallH, wallT, whitePlaster,
+    leftEdge + leftWallW/2, wallBase + wallH/2, frontZ));
+}
+// Wall segment above door
+house.add(posBox(doorW + 0.1, wallH - doorH, wallT, whitePlaster,
+  doorCenterX, wallBase + doorH + (wallH - doorH)/2, frontZ));
+
+// -- Front wall: main room section (right of sit-out) --
+// Room wall set back from sitoutFrontZ, platform extends forward to sitoutFrontZ
+const roomSetback = 0.7; // how far room wall is behind the front edge
+const roomWallZ = sitoutFrontZ - roomSetback;
+const roomProtrusion = sitoutD; // platform still extends full depth
+const roomW = rightEdge - sitoutRightEdge - 0.15; // room section width
+
+// We need segments around the 3-pane window
+const winW = 2.2, winH = 1.6;
+const winCenterX = sitoutRightEdge + 0.15 + roomW / 2; // centered in room section
+const winBaseY = wallBase + 0.9; // window sill height
+
+// Segment left of window
+const roomSectionLeft = sitoutRightEdge + 0.15;
+const segLeftW = (winCenterX - winW/2) - roomSectionLeft;
+house.add(posBox(segLeftW, wallH, wallT, whitePlaster,
+  roomSectionLeft + segLeftW/2, wallBase + wallH/2, roomWallZ));
+
+// Segment right of window
+const segRightLeft = winCenterX + winW/2;
+const segRightW = rightEdge - segRightLeft;
+house.add(posBox(segRightW, wallH, wallT, whitePlaster,
+  segRightLeft + segRightW/2, wallBase + wallH/2, roomWallZ));
+
+// Below window
+house.add(posBox(winW, winBaseY - wallBase, wallT, whitePlaster,
+  winCenterX, wallBase + (winBaseY - wallBase)/2, roomWallZ));
+
+// Above window
+const aboveWinH = wallH - (winBaseY - wallBase + winH);
+house.add(posBox(winW, aboveWinH, wallT, whitePlaster,
+  winCenterX, winBaseY + winH + aboveWinH/2, roomWallZ));
+
+// -- Room protrusion side walls (only up to room wall, not full sitoutFrontZ) --
+const sideWallD = roomWallZ - frontZ; // from original frontZ to room wall
+// Left side wall of protruding room
+house.add(posBox(wallT, wallH, sideWallD, whitePlaster,
+  sitoutRightEdge + 0.15, wallBase + wallH/2, frontZ + sideWallD/2));
+
+// Right side wall extension
+house.add(posBox(wallT, wallH, sideWallD, whitePlaster,
+  rightEdge, wallBase + wallH/2, frontZ + sideWallD/2));
+
+// -- Room protrusion platform slab (extends full depth to sitoutFrontZ) --
+house.add(posBox(roomW, platThick, roomProtrusion, concrete,
+  sitoutRightEdge + 0.15 + roomW/2, floorH - platThick/2, frontZ + roomProtrusion/2));
+
+// -- Storage recess below room protrusion --
+// Left wall beam (aligns with left pillar/wall above)
+const beamDepth = roomSetback;
+const beamCenterZ = roomWallZ + beamDepth / 2;
+house.add(posBox(supW, supH, beamDepth, concreteDark,
+  sitoutRightEdge + 0.15, supH/2, beamCenterZ));
+// Right wall beam (aligns with right pillar/wall above)
+house.add(posBox(supW, supH, beamDepth, concreteDark,
+  rightEdge, supH/2, beamCenterZ));
+// Front supports under room protrusion platform edge
+house.add(posBox(supW, supH, supW, concreteDark,
+  sitoutRightEdge + 0.15, supH/2, sitoutFrontZ));
+house.add(posBox(supW, supH, supW, concreteDark,
+  winCenterX, supH/2, sitoutFrontZ));
+house.add(posBox(supW, supH, supW, concreteDark,
+  rightEdge, supH/2, sitoutFrontZ));
+
+
+// ══════════════════════════════════════════
+// PILLARS (item 3)
+// ══════════════════════════════════════════
+// Front-left pillar of sit-out: right behind front brick wall, slightly inset from left
+const pillarSize = 0.22;
+const pillarW = 0.30; // wider pillar
+house.add(posBox(pillarW, wallH, pillarW, whitePlaster,
+  leftEdge + 0.55, wallBase + wallH/2, sitoutFrontZ - pillarW/2 - 0.08));
+
+// Separation pillar/wall between sit-out and room (LEFT side of room)
+// Runs from front platform edge back to room wall
+house.add(posBox(pillarSize, wallH, roomSetback + 0.1, whitePlaster,
+  sitoutRightEdge + 0.15, wallBase + wallH/2, roomWallZ + (roomSetback + 0.1)/2));
+
+// Separation pillar/wall between room and storeroom (RIGHT side of room)
+// Runs from front platform edge back to room wall
+house.add(posBox(pillarSize, wallH, roomSetback + 0.1, whitePlaster,
+  rightEdge, wallBase + wallH/2, roomWallZ + (roomSetback + 0.1)/2));
+
+// Left side of thinna is OPEN — no full wall, only brick half-wall exists here
+
+
+// ══════════════════════════════════════════
+// BRICK HALF-WALL / THINNA (item 2 & 3)
+// ══════════════════════════════════════════
+const halfWallH = 1.0;
+
+// Front brick half-wall: stops BEFORE the stairway
+const stepsX = doorCenterX;
+const stepW = 1.2;
+const brickT = 0.15;
+// Front wall starts from left corner (where side wall is) to before steps
+const brickFrontLeft = leftEdge + brickT/2; // starts at outer edge of side wall
+const brickFrontRight = stepsX - stepW/2 - 0.15; // stop before steps
+const brickFrontW = brickFrontRight - brickFrontLeft;
+
+if (brickFrontW > 0.1) {
+  house.add(posBox(brickFrontW, halfWallH, brickT, brickMat,
+    brickFrontLeft + brickFrontW/2, wallBase + halfWallH/2, sitoutFrontZ));
+  // Concrete cap
+  house.add(posBox(brickFrontW + 0.06, 0.07, 0.22, concrete,
+    brickFrontLeft + brickFrontW/2, wallBase + halfWallH + 0.035, sitoutFrontZ));
+}
+
+// Left side brick half-wall - runs full depth of sit-out to meet front wall at corner
+const brickSideD = sitoutD;
+house.add(posBox(brickT, halfWallH, brickSideD, brickMat,
+  leftEdge + brickT/2, wallBase + halfWallH/2, frontZ + brickSideD/2));
+// Concrete cap on left side
+house.add(posBox(0.22, 0.07, brickSideD + 0.06, concrete,
+  leftEdge + brickT/2, wallBase + halfWallH + 0.035, frontZ + brickSideD/2));
+
+
+// ══════════════════════════════════════════
+// ENTRANCE DOOR
+// ══════════════════════════════════════════
+// Door frame
+house.add(posBox(doorW + 0.12, 0.06, 0.2, frameMat,
+  doorCenterX, wallBase + doorH, frontZ + 0.02));
+house.add(posBox(0.06, doorH, 0.2, frameMat,
+  doorCenterX - doorW/2 - 0.03, wallBase + doorH/2, frontZ + 0.02));
+house.add(posBox(0.06, doorH, 0.2, frameMat,
+  doorCenterX + doorW/2 + 0.03, wallBase + doorH/2, frontZ + 0.02));
+
+// Door panel (slightly open)
+const doorMesh = posBox(doorW, doorH, 0.05, woodDoor,
+  doorCenterX + 0.2, wallBase + doorH/2, frontZ + 0.15);
+doorMesh.rotation.y = 0.4;
+house.add(doorMesh);
+
+
+// ══════════════════════════════════════════
+// THREE-PANE WINDOW (front, main room)
+// ══════════════════════════════════════════
+const winY = winBaseY + winH/2;
+const winZ = roomWallZ + 0.02;
+
+// Outer frame
+house.add(posBox(winW + 0.1, 0.06, 0.12, woodWindow, winCenterX, winY + winH/2, winZ));
+house.add(posBox(winW + 0.1, 0.06, 0.12, woodWindow, winCenterX, winY - winH/2, winZ));
+house.add(posBox(0.06, winH, 0.12, woodWindow, winCenterX - winW/2, winY, winZ));
+house.add(posBox(0.06, winH, 0.12, woodWindow, winCenterX + winW/2, winY, winZ));
+
+// Mullions (2 dividers = 3 panes)
+house.add(posBox(0.05, winH, 0.1, woodWindow, winCenterX - winW/6, winY, winZ));
+house.add(posBox(0.05, winH, 0.1, woodWindow, winCenterX + winW/6, winY, winZ));
+
+// Grid bars and arches per pane
+for (let p = -1; p <= 1; p++) {
+  const paneX = winCenterX + p * winW / 3;
+  const paneW = winW / 3 - 0.06;
+  // Horizontal bars
+  for (let j = 1; j <= 3; j++) {
+    house.add(posBox(paneW, 0.02, 0.08, woodWindow,
+      paneX, winY - winH/2 + j * winH/4, winZ + 0.01));
+  }
+  // Vertical bars
+  for (let j = 1; j <= 2; j++) {
+    house.add(posBox(0.02, winH, 0.08, woodWindow,
+      paneX - paneW/2 + j * paneW/3, winY, winZ + 0.01));
+  }
+}
+// Glass
+house.add(posBox(winW, winH, 0.02, glassMat, winCenterX, winY, winZ - 0.04));
+
+
+// ══════════════════════════════════════════
+// SIDE WINDOWS (left & right, 2 each) + storage
+// ══════════════════════════════════════════
+function createThreePaneWindow(x, y, z, rotY) {
+  const wg = new THREE.Group();
+  const tw = 2.2, th = 1.6;
+
+  // Outer frame
+  wg.add(posBox(tw + 0.1, 0.06, 0.12, woodWindow, 0, th/2, 0));
+  wg.add(posBox(tw + 0.1, 0.06, 0.12, woodWindow, 0, -th/2, 0));
+  wg.add(posBox(0.06, th, 0.12, woodWindow, -tw/2, 0, 0));
+  wg.add(posBox(0.06, th, 0.12, woodWindow, tw/2, 0, 0));
+
+  // Mullions (3 panes)
+  wg.add(posBox(0.05, th, 0.1, woodWindow, -tw/6, 0, 0));
+  wg.add(posBox(0.05, th, 0.1, woodWindow, tw/6, 0, 0));
+
+  // Grid bars per pane
+  for (let p = -1; p <= 1; p++) {
+    const paneX = p * tw / 3;
+    const paneW = tw / 3 - 0.06;
+    for (let j = 1; j <= 3; j++) {
+      wg.add(posBox(paneW, 0.02, 0.08, woodWindow,
+        paneX, -th/2 + j * th/4, 0.01));
+    }
+    for (let j = 1; j <= 2; j++) {
+      wg.add(posBox(0.02, th, 0.08, woodWindow,
+        paneX - paneW/2 + j * paneW/3, 0, 0.01));
+    }
+  }
+
+  // Glass
+  wg.add(posBox(tw, th, 0.02, glassMat, 0, 0, -0.04));
+
+  wg.position.set(x, y, z);
+  wg.rotation.y = rotY;
+  house.add(wg);
+}
+
+// Left side - two 3-pane windows (on inset wall, facing outward)
+createThreePaneWindow(leftWallX - 0.08, wallBase + wallH/2 + 0.1, leftWin1Z, Math.PI/2);
+createThreePaneWindow(leftWallX - 0.08, wallBase + wallH/2 + 0.1, leftWin2Z, Math.PI/2);
+
+// Right side - single 3-pane window centered on inset wall
+createThreePaneWindow(rightWallX + 0.08, wallBase + wallH/2 + 0.1, rightWinZ, -Math.PI/2);
+
+
+// ══════════════════════════════════════════
+// STOREROOM
+// ══════════════════════════════════════════
+// Front wall (brick)
+house.add(posBox(storeW, wallH, wallT, brickMat,
+  storeX, wallBase + wallH/2, storeFrontZ));
+// Right wall (brick)
+house.add(posBox(wallT, wallH, storeDepth, brickMat,
+  rightEdge + storeW, wallBase + wallH/2, storeCenterZ));
+// Back wall (brick)
+house.add(posBox(storeW, wallH, wallT, brickMat,
+  storeX, wallBase + wallH/2, storeBackZ));
+
+// Storeroom door
+const storeDoorX = storeX;
+house.add(posBox(0.7, 1.8, 0.06, woodDoor,
+  storeDoorX, wallBase + 0.9, storeFrontZ + 0.1));
+house.add(posBox(0.76, 0.06, 0.15, frameMat, storeDoorX, wallBase + 1.83, storeFrontZ + 0.1));
+house.add(posBox(0.06, 1.8, 0.15, frameMat, storeDoorX - 0.38, wallBase + 0.9, storeFrontZ + 0.1));
+house.add(posBox(0.06, 1.8, 0.15, frameMat, storeDoorX + 0.38, wallBase + 0.9, storeFrontZ + 0.1));
+
+// Storeroom steps - bottom step aligns with sitoutFrontZ
+const stepD = 0.28, stepH = 0.2;
+for (let i = 0; i < 4; i++) {
+  house.add(posBox(0.8, stepH, stepD, concrete,
+    storeDoorX, stepH/2 + i * stepH, storeFrontZ + 0.3 + (3 - i) * stepD));
+}
+
+// (Storeroom roof now in main ROOF & PARAPET section)
+
+
+// ══════════════════════════════════════════
+// MAIN STEPS (to sit-out) - item 2
+// ══════════════════════════════════════════
+for (let i = 0; i < 4; i++) {
+  house.add(posBox(stepW, stepH, 0.35, concrete,
+    stepsX, stepH/2 + i * stepH, sitoutFrontZ + (3 - i) * 0.35));
+}
+
+
+// ══════════════════════════════════════════
+// ROOF & PARAPET
+// ══════════════════════════════════════════
+const roofThick = 0.15;
+const parapetH = 0.65;
+const parapetT = 0.15;
+const sunSide = 0.35;  // sunshade overhang on sides and back
+const sunFront = 0.6;  // sunshade overhang at front (more pronounced)
+
+// Key Y positions
+const roofTopY = wallBase + wallH;
+const roofSlabY = roofTopY + roofThick / 2;
+const parapetY = roofTopY + roofThick + parapetH / 2;
+
+// -- Roof slab --
+const roofLeft = leftEdge - sunSide;
+const roofRight = rightEdge + sunSide;
+const roofBack = backZ - sunSide;
+const roofFront = sitoutFrontZ + sunFront;
+house.add(posBox(roofRight - roofLeft, roofThick, roofFront - roofBack, roofMat,
+  (roofLeft + roofRight) / 2, roofSlabY, (roofBack + roofFront) / 2));
+
+// -- Uniform parapet around building walls --
+
+// 1. Back parapet: at backZ, spanning between left and right inset walls
+house.add(posBox(rightWallX - leftWallX + parapetT, parapetH, parapetT, whitePlaster,
+  (leftWallX + rightWallX) / 2, parapetY, backZ));
+
+// 2. Left parapet: at leftWallX from backZ to frontZ
+house.add(posBox(parapetT, parapetH, mainD + parapetT, whitePlaster,
+  leftWallX, parapetY, 0));
+
+// 3. Right parapet: at rightWallX from backZ to frontZ
+house.add(posBox(parapetT, parapetH, mainD + parapetT, whitePlaster,
+  rightWallX, parapetY, 0));
+
+// 4. Sit-out back wall parapet: at frontZ, from leftWallX to room return
+const sitoutParapetW = sitoutRightEdge + 0.15 - leftWallX;
+house.add(posBox(sitoutParapetW + parapetT, parapetH, parapetT, whitePlaster,
+  leftWallX + sitoutParapetW / 2, parapetY, frontZ));
+
+// 5. Right side wall at frontZ connecting rightWallX to rightEdge (room right wall)
+const rightReturnW = rightEdge - rightWallX;
+house.add(posBox(rightReturnW, parapetH, parapetT, whitePlaster,
+  rightWallX + rightReturnW / 2, parapetY, frontZ));
+
+// 6. Left room return: at sitoutRightEdge from frontZ to roomWallZ
+const returnD = roomWallZ - frontZ;
+house.add(posBox(parapetT, parapetH, returnD + parapetT, whitePlaster,
+  sitoutRightEdge + 0.15, parapetY, frontZ + returnD / 2));
+
+// 7. Front room parapet: at roomWallZ from left return to right wall
+const frontParapetW = rightEdge - sitoutRightEdge;
+house.add(posBox(frontParapetW + parapetT, parapetH, parapetT, whitePlaster,
+  sitoutRightEdge + frontParapetW / 2, parapetY, roomWallZ));
+
+// 8. Right room return: at rightEdge from frontZ to roomWallZ
+house.add(posBox(parapetT, parapetH, returnD + parapetT, whitePlaster,
+  rightEdge, parapetY, frontZ + returnD / 2));
+
+// -- Storeroom roof + parapet --
+house.add(posBox(storeW + sunSide, roofThick, storeDepth + sunSide, roofMat,
+  storeX, roofSlabY, storeCenterZ));
+// Storeroom back parapet
+house.add(posBox(storeW + parapetT, parapetH, parapetT, whitePlaster,
+  storeX, parapetY, storeBackZ));
+// Storeroom right parapet
+house.add(posBox(parapetT, parapetH, storeDepth, whitePlaster,
+  rightEdge + storeW, parapetY, storeCenterZ));
+// Storeroom front parapet
+house.add(posBox(storeW + parapetT, parapetH, parapetT, whitePlaster,
+  storeX, parapetY, storeFrontZ));
+
+
+// ══════════════════════════════════════════
+// INTERIOR HINT (visible through open door)
+// ══════════════════════════════════════════
+const interiorMat = new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.9 });
+// Interior cross wall
+house.add(posBox(0.1, wallH, mainD * 0.5, interiorMat,
+  sitoutRightEdge, wallBase + wallH/2, -mainD * 0.15));
+// Floor inside
+house.add(posBox(mainW - 0.3, 0.02, mainD - 0.3, floorTile,
+  0, floorH + 0.01, 0));
+
+
+// ══════════════════════════════════════════
+// SIT-OUT FLOOR
+// ══════════════════════════════════════════
+house.add(posBox(sitoutW - 0.15, 0.02, sitoutD - 0.15, floorTile,
+  leftEdge + sitoutW/2, floorH + 0.01, frontZ + sitoutD/2));
+
+
+// ══════════════════════════════════════════
+// POTTED PLANT (on the platform ledge)
+// ══════════════════════════════════════════
+function createPlant(x, y, z) {
+  const pg = new THREE.Group();
+  const potGeo = new THREE.CylinderGeometry(0.12, 0.09, 0.22, 8);
+  const pot = new THREE.Mesh(potGeo, new THREE.MeshStandardMaterial({ color: 0x3a2518, roughness: 0.9 }));
+  pot.position.y = 0.11; pot.castShadow = true;
+  pg.add(pot);
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x3d7a2a, roughness: 0.8 });
+  for (let i = 0; i < 8; i++) {
+    const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 4), leafMat);
+    leaf.scale.set(1, 0.3, 1);
+    leaf.position.set(Math.cos(i*Math.PI/4)*0.1, 0.3+Math.random()*0.2, Math.sin(i*Math.PI/4)*0.1);
+    leaf.rotation.set(Math.random()*0.5, 0, Math.random()*0.5);
+    leaf.castShadow = true;
+    pg.add(leaf);
+  }
+  pg.position.set(x, y, z);
+  house.add(pg);
+}
+createPlant(winCenterX - 0.8, floorH, roomWallZ + roomSetback/2);
+
+    return house;
+}
+
+// ============================================================
+// TERRAIN UTILITIES (inspired by reference implementation)
+// ============================================================
+function clamp(v, mn, mx) { return Math.max(mn, Math.min(mx, v)); }
+function smoothstep(e0, e1, x) { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+// Clearing mask: radial falloff around house — creates natural flat clearing
+function clearingMask(x, z) {
+    const d = Math.hypot(x * 0.85, z + 2);
+    return 1 - smoothstep(12, 32, d);
+}
+
+// Path mask: worn dirt trail from approach to house entrance
+function pathMask(x, z) {
+    // Simple path from front (z=25) to house (z=0)
+    const dx = Math.abs(x);
+    const onPath = dx < 2.5 && z > -5 && z < 25;
+    return onPath ? smoothstep(2.5, 0.5, dx) * smoothstep(25, 20, z) : 0;
+}
+
+// Terrain slope at a point (for coloring and grass placement)
+function terrainSlope(x, z) {
+    const e = 0.3;
+    const dx = getTerrainY(x + e, z) - getTerrainY(x - e, z);
+    const dz = getTerrainY(x, z + e) - getTerrainY(x, z - e);
+    return Math.min(1, Math.sqrt(dx * dx + dz * dz));
+}
+
+// ============================================================
+// TERRAIN HEIGHT FUNCTION (smoothstep transitions)
+// ============================================================
+const HOUSE_FLOOR = 1.5;
+
+function getTerrainY(x, z) {
+    // Base noise
+    const baseNoise =
+        Math.sin(x * 0.09) * 0.55 +
+        Math.cos(z * 0.12) * 0.38 +
+        Math.sin((x + z) * 0.08) * 0.45 +
+        Math.cos((x - z) * 0.06) * 0.35;
+
+    let y = baseNoise * 0.45;
+
+    // House plateau — flat clearing around the house
+    const housePlateau = clearingMask(x, z);
+    y = lerp(y, HOUSE_FLOOR, housePlateau);
+
+    // Right side ascends — terraced slopes with smoothstep transitions
+    const rightTerraces =
+        smoothstep(10, 18, x) * 2.5 +
+        smoothstep(22, 32, x) * 2.0 +
+        smoothstep(36, 48, x) * 1.5;
+    y += rightTerraces;
+
+    // Left side descends — gradual drop
+    const leftDrop =
+        smoothstep(18, 32, -x) * 2.2 +
+        smoothstep(34, 50, -x) * 1.8 +
+        smoothstep(52, 68, -x) * 1.2;
+    y -= leftDrop;
+
+    // Front approach — gentle ramp down
+    const frontApron = 1 - smoothstep(5, 30, Math.hypot(x * 0.85, z + 12));
+    y = lerp(y, HOUSE_FLOOR - 0.3, frontApron * 0.6);
+
+    // Downhill valley to the left-front
+    const downhillValley = smoothstep(24, 65, -x) * smoothstep(-20, 24, z + 8);
+    y -= downhillValley * 2.5;
+
+    // Ridge behind the house
+    const ridgeBack = smoothstep(16, 45, z) * 1.2;
+    y += ridgeBack;
+
+    // Organic fbm noise on top
+    y += (fbm(x * 0.04, z * 0.04) - 0.5) * 2.0;
+    y += (fbm(x * 0.1 + 50, z * 0.1 + 50) - 0.5) * 0.8;
+
+    return y;
+}
+
+// Walkable height — includes house floor platform + sculpted terrain deltas
+// _terrainDeltaFn is set after terrain loads (to avoid forward reference)
+let _terrainDeltaFn = () => 0;
+function walkableHeight(x, z) {
+    let y = getTerrainY(x, z) + _terrainDeltaFn(x, z);
+    const insideHouse = x > -10 && x < 10 && z > -20 && z < 5;
+    if (insideHouse) {
+        y = Math.max(y, HOUSE_FLOOR);
+    }
+    return y;
+}
+
+function isInStepZone() { return false; }
+
+// ============================================================
+// TERRAIN
+// ============================================================
+function createTerrain() {
+    const group = new THREE.Group();
+    const size = 180, seg = 160;
+    const geo = new THREE.PlaneGeometry(size, size, seg, seg);
+    geo.rotateX(-Math.PI / 2);
+    const pos = geo.attributes.position;
+    const colors = new Float32Array(pos.count * 3);
+    // Colors — mostly brown/laterite earth with patches of green
+    const dirtLight = { r: 0.52, g: 0.36, b: 0.22 };  // light brown laterite
+    const dirtDark  = { r: 0.38, g: 0.25, b: 0.15 };  // dark earth
+    const dirtRed   = { r: 0.50, g: 0.28, b: 0.16 };  // red laterite
+    const greenPatch = { r: 0.30, g: 0.42, b: 0.18 };  // sparse green patches
+    const wetDark   = { r: 0.25, g: 0.18, b: 0.12 };  // damp earth
+
+    for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), z = pos.getZ(i);
+        const y = getTerrainY(x, z);
+        pos.setY(i, y);
+
+        const slope = terrainSlope(x, z);
+        const clear = clearingMask(x, z);
+        const path = pathMask(x, z);
+        const n1 = hash2D(x * 0.3, z * 0.3);       // large patches
+        const n2 = hash2D(x * 0.8 + 100, z * 0.8);  // fine detail
+        const n3 = hash2D(x * 0.15, z * 0.15 + 50);  // green patch noise
+        const noise = (n2 - 0.5) * 0.07;
+
+        // Start with light brown dirt
+        let r = dirtLight.r, g = dirtLight.g, b = dirtLight.b;
+
+        // Red laterite patches
+        const redAmount = smoothstep(0.3, 0.7, n1) * 0.5;
+        r = lerp(r, dirtRed.r, redAmount);
+        g = lerp(g, dirtRed.g, redAmount);
+        b = lerp(b, dirtRed.b, redAmount);
+
+        // Darker earth on slopes and paths
+        const darkAmount = clamp(slope * 0.6 + path * 0.5 + clear * 0.3, 0, 1);
+        r = lerp(r, dirtDark.r, darkAmount);
+        g = lerp(g, dirtDark.g, darkAmount);
+        b = lerp(b, dirtDark.b, darkAmount);
+
+        // No green — pure brown/laterite terrain
+
+        // Wet/damp patches
+        const wetAmount = smoothstep(0.6, 0.9, n2) * 0.2;
+        r = lerp(r, wetDark.r, wetAmount);
+        g = lerp(g, wetDark.g, wetAmount);
+        b = lerp(b, wetDark.b, wetAmount);
+
+        // Fine noise variation
+        r += noise; g += noise; b += noise;
+
+        colors[i * 3] = clamp(r, 0, 1);
+        colors[i * 3 + 1] = clamp(g, 0, 1);
+        colors[i * 3 + 2] = clamp(b, 0, 1);
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, map: TEX.terrain, bumpMap: TEX.terrain, bumpScale: 0.3 }));
+    mesh.receiveShadow = true; mesh.castShadow = true;
+    group.add(mesh);
+
+    return group;
+}
+
+// ============================================================
+// SIDE CUT SLOPE (earth bank next to house, like reference photos)
+// ============================================================
+function createSideCutSlope() {
+    const g = new THREE.Group();
+    const earthMat = new THREE.MeshStandardMaterial({ color: 0x775032, roughness: 1 });
+    const topMat = new THREE.MeshStandardMaterial({ color: 0x6b8b45, roughness: 1 });
+    // Earth bank on the right side — steep cut into hillside
+    const bankX = 18, bankZ = 0;
+    const bankY = getTerrainY(bankX, bankZ);
+    const bank = new THREE.Mesh(new THREE.BoxGeometry(14, 4.5, 28), earthMat);
+    bank.position.set(bankX + 7, bankY + 1.5, bankZ);
+    bank.castShadow = true; bank.receiveShadow = true;
+    g.add(bank);
+    // Green grass cap on top
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(14.5, 0.25, 28.5), topMat);
+    cap.position.set(bankX + 7, bankY + 3.8, bankZ);
+    cap.receiveShadow = true;
+    g.add(cap);
+    return g;
+}
+
+// ============================================================
+// GRASS CLUSTERS + MOSS (curved blades, varying sizes, natural clusters)
+// ============================================================
+function createGrassSystem() {
+    const group = new THREE.Group();
+
+    // Seeded random
+    let seed = 42;
+    function rand() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+
+    // Grass blade shape — curved via bezier, not a cone
+    function makeBladeGeo(h, w) {
+        const shape = new THREE.Shape();
+        shape.moveTo(-w / 2, 0);
+        shape.quadraticCurveTo(-w * 0.3, h * 0.4, w * 0.15, h * 0.85);
+        shape.quadraticCurveTo(w * 0.2, h, 0, h);
+        shape.quadraticCurveTo(-w * 0.1, h * 0.9, -w * 0.05, h * 0.8);
+        shape.quadraticCurveTo(w * 0.1, h * 0.35, w / 2, 0);
+        shape.lineTo(-w / 2, 0);
+        return new THREE.ShapeGeometry(shape, 1);
+    }
+
+    // Pre-create a few blade geometries at different sizes
+    const bladeGeos = [
+        makeBladeGeo(0.3, 0.04),
+        makeBladeGeo(0.5, 0.05),
+        makeBladeGeo(0.7, 0.06),
+        makeBladeGeo(0.9, 0.06),
+        makeBladeGeo(1.1, 0.07),
+    ];
+
+    // Grass greens — variety of shades
+    const grassColors = [
+        0x2D5A1E, 0x3A6B28, 0x4A7A32, 0x2A5518, 0x3E7030,
+        0x486E28, 0x355E22, 0x528A38, 0x1E4A12, 0x407530,
+    ];
+
+    // Place grass clusters
+    const clusterCount = 1400;
+    for (let c = 0; c < clusterCount; c++) {
+        const cx = rand() * 160 - 80;
+        const cz = rand() * 160 - 80;
+        const nearHouse = Math.hypot(cx, cz) < 8;
+        const path = pathMask(cx, cz);
+        if (nearHouse || path > 0.3) continue;
+
+        // Thick clusters: some are sparse tufts, some are dense bushes
+        const isThick = rand() > 0.6;
+        const density = isThick ? (12 + Math.floor(rand() * 18)) : (3 + Math.floor(rand() * 8));
+        const spread = isThick ? (0.5 + rand() * 1.0) : (0.3 + rand() * 0.6);
+        const baseY = getTerrainY(cx, cz);
+
+        for (let b = 0; b < density; b++) {
+            const bx = cx + (rand() - 0.5) * spread * 2;
+            const bz = cz + (rand() - 0.5) * spread * 2;
+            // Snap each blade to terrain at its own position
+            const by = getTerrainY(bx, bz) - 0.02; // sink slightly into ground
+
+            const geoIdx = Math.floor(rand() * bladeGeos.length);
+            const colorIdx = Math.floor(rand() * grassColors.length);
+            const mat = new THREE.MeshStandardMaterial({
+                color: grassColors[colorIdx], roughness: 0.85, side: THREE.DoubleSide
+            });
+            const blade = new THREE.Mesh(bladeGeos[geoIdx], mat);
+            blade.position.set(bx, by, bz);
+            blade.rotation.y = rand() * Math.PI * 2;
+            blade.rotation.z = (rand() - 0.5) * 0.3;
+            blade.rotation.x = (rand() - 0.5) * 0.15;
+            group.add(blade);
+        }
+
+    }
+
+    return group;
+}
+
+// ============================================================
+// WELL
+// ============================================================
+// ============================================================
+function createWell() {
+    const g = new THREE.Group();
+    const sMat = new THREE.MeshStandardMaterial({ color: C.well, roughness: 0.85 });
+    const wdMat = new THREE.MeshStandardMaterial({ color: C.wood, roughness: 0.7 });
+    g.add(new THREE.Mesh(new THREE.CylinderGeometry(1.8, 2, 2.5, 16, 1, true), sMat).translateY(1.25));
+    g.add(new THREE.Mesh(new THREE.TorusGeometry(1.9, 0.2, 6, 16), sMat).translateY(2.5).rotateX(Math.PI / 2));
+    g.add(new THREE.Mesh(new THREE.CircleGeometry(1.6, 16), new THREE.MeshStandardMaterial({ color: C.water, roughness: 0.1, metalness: 0.2 })).rotateX(-Math.PI / 2).translateY(0.5));
+    [-1, 1].forEach(x => g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 3, 6), wdMat).translateX(x).translateY(4)));
+    g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.2, 6), wdMat).translateY(5.5).rotateZ(Math.PI / 2));
+    return g;
+}
+
+// ============================================================
+// GROUND COVER (with wind-animatable grass)
+// ============================================================
+function createGroundCover() {
+    const g = new THREE.Group();
+    const mats = [
+        new THREE.MeshLambertMaterial({ color: C.grass, side: THREE.DoubleSide }),
+        new THREE.MeshLambertMaterial({ color: C.grassLight, side: THREE.DoubleSide }),
+        new THREE.MeshLambertMaterial({ color: C.grassDry, side: THREE.DoubleSide }),
+    ];
+    const grassBlades = [];
+    for (let i = 0; i < 300; i++) {
+        const x = (Math.random() - 0.5) * 140;
+        const z = (Math.random() - 0.5) * 100;
+        const y = getTerrainY(x, z);
+        const mat = mats[Math.floor(Math.random() * 3)];
+        for (let j = 0; j < 3; j++) {
+            const h = 0.25 + Math.random() * 0.5;
+            const blade = new THREE.Shape();
+            blade.moveTo(-0.025, 0);
+            blade.quadraticCurveTo(0.04, h * 0.6, (Math.random() - 0.5) * 0.12, h);
+            blade.quadraticCurveTo(-0.04, h * 0.6, 0.025, 0);
+            const m = new THREE.Mesh(new THREE.ShapeGeometry(blade), mat);
+            m.position.set(x + (Math.random() - 0.5) * 0.5, y, z + (Math.random() - 0.5) * 0.5);
+            m.rotation.y = Math.random() * Math.PI;
+            m.userData.windPhase = Math.random() * Math.PI * 2;
+            m.userData.worldX = x;
+            grassBlades.push(m);
+            g.add(m);
+        }
+    }
+    g.userData.grassBlades = grassBlades;
+
+    // Stones
+    const stMat = new THREE.MeshLambertMaterial({ color: 0x7A7268 });
+    for (let i = 0; i < 50; i++) {
+        const x = (Math.random() - 0.5) * 100, z = (Math.random() - 0.5) * 60;
+        const y = getTerrainY(x, z);
+        const s = new THREE.Mesh(new THREE.SphereGeometry(0.12 + Math.random() * 0.18, 5, 4), stMat);
+        s.position.set(x, y + 0.06, z); s.scale.y = 0.4 + Math.random() * 0.3;
+        g.add(s);
+    }
+    return g;
+}
+
+// ============================================================
+// DISTANT HILLS
+// ============================================================
+function createHills() {
+    const g = new THREE.Group();
+    [[-70, 0x1A6E30, 5, 1.2], [-90, 0x1B7B32, 4, 1.5], [-115, 0x2E8D42, 6, 1.8]].forEach(([z, col, n, sc]) => {
+        for (let i = 0; i < n; i++) {
+            const m = new THREE.Mesh(
+                new THREE.SphereGeometry(1, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+                new THREE.MeshLambertMaterial({ color: col }));
+            m.scale.set(30 * sc, 14 + Math.random() * 10, 20 * sc);
+            m.position.set((i - n / 2) * 35 + (Math.random() - 0.5) * 15, -5, z);
+            g.add(m);
+        }
+    });
+    return g;
+}
+
+// ============================================================
+// HELPER: place object snapped to terrain
+// ============================================================
+function placeOnTerrain(obj, x, z, yOffset = 0) {
+    const y = getTerrainY(x, z);
+    obj.position.set(x, y + yOffset, z);
+}
+
+// ============================================================
+// ASSEMBLE SCENE
+// ============================================================
+const gltfLoader = new GLTFLoader();
+const objLoader = new OBJLoader();
+
+// Layout registry — maps object IDs to scene objects (mirrors editor)
+const sceneObjects = {};
+function regObj(id, obj) { sceneObjects[id] = obj; applyLayout(id); }
+
+// Apply saved layout from editor (via localStorage)
+const savedLayout = (() => {
+    try { return JSON.parse(localStorage.getItem('sceneLayout')); } catch { return null; }
+})();
+
+function applyLayout(id) {
+    if (!savedLayout || !savedLayout[id]) return;
+    const o = sceneObjects[id], l = savedLayout[id];
+    if (!o) return;
+    o.position.set(l.position.x, l.position.y, l.position.z);
+    o.scale.set(l.scale.x, l.scale.y, l.scale.z);
+    o.rotation.y = l.rotation.y;
+}
+if (savedLayout) console.log('Loaded editor layout with', Object.keys(savedLayout).length, 'objects');
+
+const terrainGroup = createTerrain();
+scene.add(terrainGroup);
+
+// Apply terrain sculpt deltas from editor + build delta grid for walkable height
+const TERRAIN_SIZE = 180, TERRAIN_SEG = 160;
+const CELL_SIZE = TERRAIN_SIZE / TERRAIN_SEG; // 1.125
+const deltaGrid = new Float32Array((TERRAIN_SEG + 1) * (TERRAIN_SEG + 1)); // all zeros
+
+try {
+    const raw = localStorage.getItem('terrainDeltas');
+    if (raw) {
+        const tDeltas = JSON.parse(raw);
+        const n = Object.keys(tDeltas).length;
+        if (n > 0) {
+            const tMesh = terrainGroup.children[0];
+            const tPos = tMesh.geometry.attributes.position;
+            console.log('Terrain mesh verts:', tPos.count, 'Deltas:', n);
+            for (const [idx, dy] of Object.entries(tDeltas)) {
+                const i = parseInt(idx);
+                if (i < tPos.count) {
+                    tPos.setY(i, tPos.getY(i) + dy);
+                    deltaGrid[i] = dy; // store in grid for height sampling
+                }
+            }
+            tPos.needsUpdate = true;
+            tMesh.geometry.computeVertexNormals();
+            console.log('Applied terrain edits:', n, 'vertices');
+        }
+    }
+} catch (e) { console.log('Terrain delta error:', e); }
+
+// Sample sculpted terrain delta at any world XZ via bilinear interpolation
+function getTerrainDelta(x, z) {
+    // Convert world coords to grid coords
+    // PlaneGeometry vertices go from -size/2 to +size/2, row-major
+    const gx = (x + TERRAIN_SIZE / 2) / CELL_SIZE;
+    const gz = (z + TERRAIN_SIZE / 2) / CELL_SIZE;
+    const ix = Math.floor(gx), iz = Math.floor(gz);
+    if (ix < 0 || ix >= TERRAIN_SEG || iz < 0 || iz >= TERRAIN_SEG) return 0;
+    const fx = gx - ix, fz = gz - iz;
+    const stride = TERRAIN_SEG + 1;
+    // PlaneGeometry: rows go along X, columns along Z (after rotateX(-PI/2))
+    // Vertex index = iz * stride + ix  (but need to verify ordering)
+    const i00 = iz * stride + ix;
+    const i10 = iz * stride + ix + 1;
+    const i01 = (iz + 1) * stride + ix;
+    const i11 = (iz + 1) * stride + ix + 1;
+    // Bilinear interpolation
+    const d00 = deltaGrid[i00] || 0, d10 = deltaGrid[i10] || 0;
+    const d01 = deltaGrid[i01] || 0, d11 = deltaGrid[i11] || 0;
+    return (d00 * (1-fx) * (1-fz)) + (d10 * fx * (1-fz)) + (d01 * (1-fx) * fz) + (d11 * fx * fz);
+}
+
+// Connect terrain delta sampler to walkable height
+_terrainDeltaFn = getTerrainDelta;
+scene.add(createSideCutSlope());
+scene.add(createGrassSystem());
+
+// Well (scaled down to realistic proportions)
+const well = createWell();
+well.scale.set(0.45, 0.45, 0.45);
+placeOnTerrain(well, -3, -19, 0.2);
+scene.add(well);
+regObj('well', well);
+registerCollider(-3, -19, 1.0);
+
+// ============================================================
+// LOAD ROCK OBJ+MTL
+// ============================================================
+const rockMtlLoader = new MTLLoader();
+rockMtlLoader.setPath('assets/rock/');
+rockMtlLoader.load('rock.mtl', (materials) => {
+    materials.preload();
+    const rockObjLoader = new OBJLoader();
+    rockObjLoader.setMaterials(materials);
+    rockObjLoader.setPath('assets/rock/');
+    rockObjLoader.load('uploads_files_6235936_free+rock+250623-highpoly.obj', (obj) => {
+        // Rock is ~238x88x37. Non-uniform scale: wider and deeper
+        obj.scale.set(0.18, 0.14, 0.35);
+        obj.traverse(c => {
+            if (c.isMesh) {
+                c.castShadow = true; c.receiveShadow = true;
+                const mats = Array.isArray(c.material) ? c.material : [c.material];
+                c.material = mats.map(m => {
+                    if (m.isMeshPhongMaterial) {
+                        return new THREE.MeshStandardMaterial({
+                            color: m.color, map: m.map, normalMap: m.normalMap, bumpMap: m.bumpMap,
+                            side: THREE.DoubleSide, roughness: 0.9, metalness: 0.0,
+                        });
+                    }
+                    return m;
+                });
+                if (c.material.length === 1) c.material = c.material[0];
+            }
+        });
+        // Snap to terrain, right side of house front yard
+        obj.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(obj);
+        const rx = 14, rz = 18;
+        const terrainY = getTerrainY(rx, rz);
+        obj.position.set(rx, terrainY - box.min.y, rz);
+        obj.rotation.y = 0.4;
+        scene.add(obj);
+        regObj('rock', obj);
+        registerCollider(rx, rz, 4);
+        console.log('Rock loaded');
+    }, undefined, (err) => console.log('Rock OBJ failed:', err.message || err));
+}, undefined, (err) => console.log('Rock MTL failed:', err.message || err));
+
+// ============================================================
+// PLACE KERALA HOUSE
+// ============================================================
+const houseModel = createKeralaHouse();
+const houseTerrainY = getTerrainY(0, 0);
+houseModel.position.set(0, houseTerrainY, 0);
+scene.add(houseModel);
+regObj('house', houseModel);
+// Set collision AABB (after layout applied)
+houseModel.updateMatrixWorld(true);
+const houseBox = new THREE.Box3().setFromObject(houseModel);
+houseAABB = { minX: houseBox.min.x, maxX: houseBox.max.x, minZ: houseBox.min.z, maxZ: houseBox.max.z };
+
+// ============================================================
+// LOAD COCONUT TREE GLBs
+// ============================================================
+let coconutTemplates = [null, null];
+let coconutTemplatesLoaded = 0;
+
+const coconutData = [
+    // Original positions
+    [-9, -12], [10, -10], [-16, 4], [18, 8], [-22, -15],
+    [25, -6], [-12, 18], [30, 4], [-32, 2], [36, -8],
+    [5, 25], [-6, -22], [14, -18], [-18, -8], [8, -25],
+    [-28, -5], [22, 15], [-8, 28], [40, 2], [-38, -10],
+    // Additional for denser canopy (like reference photos)
+    [-5, -18], [3, -20], [-14, -6], [16, -4], [-20, 10],
+    [28, -12], [-25, -22], [35, 10], [-30, 8], [20, -20],
+    [-10, -30], [8, -32], [-18, 14], [32, -18], [-35, -8],
+    [42, -4], [-40, 5], [15, 22], [-8, -35], [25, 18],
+];
+const coconutHeights = coconutData.map(() => 16 + Math.random() * 6);
+const coconutPhases = coconutData.map(() => Math.random() * Math.PI * 2);
+
+// Register colliders immediately (don't need model for that)
+coconutData.forEach(([x, z]) => registerCollider(x, z, 0.5));
+
+function spawnCoconuts() {
+    const tpl = coconutTemplates[0] || coconutTemplates[1];
+    if (!tpl) return;
+    coconutData.forEach(([x, z], i) => {
+        const clone = (coconutTemplates[i % 2] || tpl).clone();
+        const s = coconutHeights[i] / 1565;
+        clone.scale.set(s, s, s);
+        clone.userData.windPhase = coconutPhases[i];
+        clone.rotation.y = Math.random() * Math.PI * 2;
+        placeOnTerrain(clone, x, z, 0);
+        scene.add(clone);
+        regObj(`coconut_${i}`, clone);
+        windTargets.coconuts.push(clone);
+    });
+}
+
+gltfLoader.load('assets/coconut_tree/coconut_tree.glb', (gltf) => {
+    gltf.scene.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+    coconutTemplates[0] = gltf.scene;
+    if (++coconutTemplatesLoaded >= 1) spawnCoconuts();
+}, undefined, () => { if (++coconutTemplatesLoaded >= 1) spawnCoconuts(); });
+
+gltfLoader.load('assets/coconut_tree/coconut_tree (1).glb', (gltf) => {
+    gltf.scene.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+    coconutTemplates[1] = gltf.scene;
+    if (++coconutTemplatesLoaded >= 1) spawnCoconuts();
+}, undefined, () => { if (++coconutTemplatesLoaded >= 1) spawnCoconuts(); });
+
+// ============================================================
+// LOAD BANANA PLANT OBJ+MTL (with textures)
+// ============================================================
+const plantainData = [[-8, -6], [7, -14], [-12, 2], [5, -8], [-4, -15], [10, -5]];
+
+const bananaMtlLoader = new MTLLoader();
+bananaMtlLoader.setPath('assets/banana_plant/');
+bananaMtlLoader.load('banana.mtl', (materials) => {
+    materials.preload();
+    const bananaObjLoader = new OBJLoader();
+    bananaObjLoader.setMaterials(materials);
+    bananaObjLoader.setPath('assets/banana_plant/');
+    bananaObjLoader.load('uploads_files_2543479_Banana_Plant_01.obj', (obj) => {
+        obj.traverse(c => {
+            if (c.isMesh) {
+                c.castShadow = true; c.receiveShadow = true;
+                const mats = Array.isArray(c.material) ? c.material : [c.material];
+                c.material = mats.map(m => {
+                    if (m.isMeshPhongMaterial) {
+                        const std = new THREE.MeshStandardMaterial({
+                            color: m.color, map: m.map, normalMap: m.normalMap,
+                            side: THREE.DoubleSide, roughness: 0.7, metalness: 0.0,
+                            transparent: m.transparent, opacity: m.opacity,
+                            alphaMap: m.alphaMap, alphaTest: 0.5,
+                        });
+                        return std;
+                    }
+                    m.side = THREE.DoubleSide; m.alphaTest = 0.5;
+                    return m;
+                });
+                if (c.material.length === 1) c.material = c.material[0];
+            }
+        });
+        plantainData.forEach(([x, z], i) => {
+            const clone = obj.clone();
+            clone.scale.set(1.5, 1.5, 1.5);
+            clone.userData.windPhase = Math.random() * Math.PI * 2;
+            clone.rotation.y = Math.random() * Math.PI * 2;
+            placeOnTerrain(clone, x, z, 0);
+            scene.add(clone);
+            regObj(`banana_${i}`, clone);
+            windTargets.plantains.push(clone);
+        });
+        console.log('Banana plants loaded with textures');
+    }, undefined, (err) => console.log('Banana OBJ failed:', err.message || err));
+}, undefined, (err) => console.log('Banana MTL failed:', err.message || err));
+
+// ============================================================
+// LOAD MANGO TREES OBJ+MTL (3 variants for dense canopy)
+// ============================================================
+const mangoMtlLoader = new MTLLoader();
+mangoMtlLoader.setPath('assets/mango_tree/');
+mangoMtlLoader.load('mango.mtl', (materials) => {
+    materials.preload();
+    const variants = ['tree_mango_var01.obj', 'tree_mango_var02.obj', 'tree_mango_var03.obj'];
+    let loaded = 0;
+    const templates = [null, null, null];
+
+    // Placement data: [x, z, scaleVar, rotY]
+    const mangoPlacements = [
+        // Behind house — dense forest backdrop
+        [-5, -20, 1.0, 0.5], [5, -22, 1.1, 2.0], [-10, -25, 0.9, 3.5],
+        [8, -28, 1.0, 1.2], [-3, -30, 1.2, 4.0], [12, -24, 0.95, 0.8],
+        [-15, -22, 1.0, 2.5], [0, -35, 1.1, 1.8],
+        // Left hillside
+        [-18, -5, 0.85, 1.0], [-22, 2, 1.0, 3.2], [-25, -10, 1.1, 0.3],
+        [-20, 8, 0.9, 4.5], [-28, -3, 1.0, 2.0],
+        // Right hillside
+        [20, -8, 1.0, 1.4], [24, -3, 1.1, 3.8], [28, -10, 1.0, 0.6],
+        [22, 5, 0.85, 2.8], [30, -6, 1.0, 1.5],
+        // Scattered around
+        [-8, 8, 0.8, 2.2], [6, 6, 0.9, 0.9], [-12, -15, 1.0, 3.0],
+        [15, -14, 1.1, 4.2], [-6, -28, 1.0, 1.6],
+    ];
+
+    function spawnMangos() {
+        const available = templates.filter(t => t !== null);
+        if (available.length === 0) return;
+        mangoPlacements.forEach(([x, z, scaleVar, rotY], i) => {
+            const tpl = available[i % available.length];
+            const clone = tpl.clone();
+            // Re-assign materials from original
+            const origMats = [];
+            tpl.traverse(c => { if (c.isMesh) origMats.push(c.material); });
+            let mi = 0;
+            clone.traverse(c => {
+                if (c.isMesh) {
+                    c.material = origMats[mi++ % origMats.length];
+                    c.castShadow = true; c.receiveShadow = true;
+                }
+            });
+            // Models are ~270-320 units tall. Scale to ~10-14m
+            const s = 0.045 * scaleVar;
+            clone.scale.set(s, s, s);
+            clone.rotation.y = rotY;
+            const ty = getTerrainY(x, z);
+            clone.position.set(x, ty, z);
+            scene.add(clone);
+            regObj(`mango_${i}`, clone);
+            registerCollider(x, z, 0.6);
+        });
+        console.log('Mango trees placed:', mangoPlacements.length);
+    }
+
+    variants.forEach((file, idx) => {
+        const loader = new OBJLoader();
+        loader.setMaterials(materials);
+        loader.setPath('assets/mango_tree/uploads_files_780879_MangoTreePack_OBJ/');
+        loader.load(file, (obj) => {
+            // Convert Phong → Standard
+            obj.traverse(c => {
+                if (c.isMesh) {
+                    c.castShadow = true; c.receiveShadow = true;
+                    const mats = Array.isArray(c.material) ? c.material : [c.material];
+                    c.material = mats.map(m => {
+                        if (m.isMeshPhongMaterial) {
+                            return new THREE.MeshStandardMaterial({
+                                color: m.color, map: m.map, normalMap: m.normalMap, bumpMap: m.bumpMap,
+                                alphaMap: m.alphaMap, alphaTest: m.alphaMap ? 0.5 : 0,
+                                side: THREE.DoubleSide, roughness: 0.75, metalness: 0.0,
+                                transparent: !!m.alphaMap,
+                            });
+                        }
+                        m.side = THREE.DoubleSide;
+                        return m;
+                    });
+                    if (c.material.length === 1) c.material = c.material[0];
+                }
+            });
+            templates[idx] = obj;
+            loaded++;
+            if (loaded >= 1) spawnMangos(); // spawn as soon as first variant loads
+        }, undefined, (err) => {
+            console.log('Mango', file, 'failed:', err.message || err);
+            loaded++;
+        });
+    });
+}, undefined, (err) => console.log('Mango MTL failed:', err.message || err));
+
+// ============================================================
+// LOAD VGGT GLB
+// ============================================================
+let glbScene = null;
+gltfLoader.load('vggt_scene.glb', (gltf) => {
+    glbScene = gltf.scene;
+    glbScene.scale.set(60, 60, 60);
+    glbScene.rotation.x = -Math.PI / 2;
+    glbScene.position.set(0, 8, 5);
+    glbScene.visible = false;
+    scene.add(glbScene);
+}, undefined, () => {});
+
+// ============================================================
+// DUST MOTES (atmospheric particles)
+// ============================================================
+const dustGeo = new THREE.BufferGeometry();
+const dustCount = 80;
+const dustPositions = new Float32Array(dustCount * 3);
+for (let i = 0; i < dustCount; i++) {
+    dustPositions[i * 3] = (Math.random() - 0.5) * 40;
+    dustPositions[i * 3 + 1] = 2 + Math.random() * 12;
+    dustPositions[i * 3 + 2] = (Math.random() - 0.5) * 40;
+}
+dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
+const dustMat = new THREE.PointsMaterial({ color: 0xFFEED0, size: 0.08, transparent: true, opacity: 0.4 });
+const dustMotes = new THREE.Points(dustGeo, dustMat);
+scene.add(dustMotes);
+
+// ============================================================
+// WIND ANIMATION
+// ============================================================
+function updateWind(elapsed) {
+    const baseWind = Math.sin(elapsed * 0.5) * 0.5 + 0.5;
+
+    windTargets.coconuts.forEach(t => {
+        const phase = t.userData.windPhase || 0;
+        const amp = 0.015 + baseWind * 0.01;
+        t.rotation.x = Math.sin(elapsed * 1.2 + phase) * amp;
+        t.rotation.z = Math.cos(elapsed * 1.2 + phase * 0.7) * amp * 0.6;
+    });
+
+    windTargets.plantains.forEach(t => {
+        const phase = t.userData.windPhase || 0;
+        const amp = 0.012;
+        t.rotation.x = Math.sin(elapsed * 1.1 + phase) * amp;
+        t.rotation.z = Math.cos(elapsed * 1.1 + phase * 0.8) * amp * 0.7;
+    });
+}
+
+// ============================================================
+// DUST MOTE ANIMATION
+// ============================================================
+function updateDust(elapsed) {
+    const pos = dustMotes.geometry.attributes.position;
+    for (let i = 0; i < dustCount; i++) {
+        let x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        x += Math.sin(elapsed * 0.3 + i * 0.5) * 0.003;
+        y += Math.sin(elapsed * 0.2 + i * 0.3) * 0.002;
+        z += Math.cos(elapsed * 0.25 + i * 0.4) * 0.003;
+        // Wrap bounds
+        if (x > 20) x = -20; if (x < -20) x = 20;
+        if (y > 14) y = 2; if (y < 2) y = 14;
+        if (z > 20) z = -20; if (z < -20) z = 20;
+        pos.setXYZ(i, x, y, z);
+    }
+    pos.needsUpdate = true;
+}
+
+// ============================================================
+// RENDER LOOP
+// ============================================================
+function animate() {
+    requestAnimationFrame(animate);
+    const delta = clock.getDelta();
+    const elapsed = clock.getElapsedTime();
+    updateMovement(delta);
+    updateWind(elapsed);
+
+    updateDust(elapsed);
+    renderer.render(scene, camera);
+}
+animate();
+
+// Set initial camera height
+camera.position.y = walkableHeight(camera.position.x, camera.position.z) + EYE_HEIGHT;
+
+addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+node_modules/
+.DS_Store
+*.rar
+*.zip
+*.tga
+*.tiff
+*.blend
+*.pyc
+__pycache__/
+yolo11n.pt
+
+# Large/generated folders
+output_buildings/
+output_buildings.zip
+frames/
+
+# Scripts not needed for web
+filter_buildings.py
+filter_buildings_v2.py
+optimize_house.py
+screenshot.js
+package-lock.json
+package.json
+
+# Original large source textures (web-optimized copies are kept)
+assets/rock/uploads_files_6235936_texture/
+assets/mango_tree/uploads_files_780879_MangoTreePack_Textures/
+assets/house/new_house/uploads_files_3436593_Textures/
+assets/banana_plant/uploads_files_2543479_Banana_Plant_01.blend
+
+# Old house model (replaced by procedural)
+assets/house/sample_2026-03-28T163906.311.glb
+assets/house/new_house/uploads_files_3436593_RuralIndianSmallHouse.mtl
+assets/house/new_house/uploads_files_3436593_RuralIndianSmallHouse.obj
+
+# Generic tree (unused)
+assets/generic_tree/
