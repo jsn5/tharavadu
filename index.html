@@ -86,137 +86,220 @@ function tRand(seed) { let s = seed; return () => { s = (s * 16807) % 2147483647
 
 const TEX = {};
 
-// Weathered white wall
+// Weathered white wall — moderate tropical weathering
 TEX.wall = makeTex(512, 512, (ctx, w, h) => {
-    ctx.fillStyle = '#F0EBE0'; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#E8E0D4'; ctx.fillRect(0, 0, w, h);
     const rng = tRand(42);
     // Plaster noise
     for (let i = 0; i < 4000; i++) {
-        const v = 225 + rng() * 25;
-        ctx.fillStyle = `rgb(${v},${v - 4},${v - 12})`;
+        const v = 210 + rng() * 35;
+        ctx.fillStyle = `rgba(${v},${v - 4},${v - 10},0.25)`;
         ctx.fillRect(rng() * w, rng() * h, 1 + rng() * 3, 1 + rng() * 3);
     }
-    // Vertical water/rain stains from roof
-    for (let i = 0; i < 12; i++) {
-        const x = rng() * w, sw = 4 + rng() * 12;
+    // Mold/algae streaks from top
+    for (let i = 0; i < 9; i++) {
+        const x = rng() * w, sw = 6 + rng() * 14;
+        const fade = 0.6 + rng() * 0.1;
         const g = ctx.createLinearGradient(x, 0, x, h);
-        g.addColorStop(0, `rgba(70,80,60,${0.08 + rng() * 0.12})`);
-        g.addColorStop(0.4, `rgba(70,80,60,${0.03 + rng() * 0.06})`);
-        g.addColorStop(1, 'rgba(70,80,60,0)');
+        g.addColorStop(0, `rgba(40,50,35,${0.12 + rng() * 0.06})`);
+        g.addColorStop(0.35, `rgba(40,50,35,${0.06 + rng() * 0.04})`);
+        g.addColorStop(fade, 'rgba(40,50,35,0)');
+        g.addColorStop(1, 'rgba(40,50,35,0)');
         ctx.fillStyle = g; ctx.fillRect(x - sw / 2, 0, sw, h);
     }
-    // Green moss/algae at bottom
-    const mg = ctx.createLinearGradient(0, h, 0, h * 0.55);
-    mg.addColorStop(0, 'rgba(50,85,40,0.35)'); mg.addColorStop(1, 'rgba(50,85,40,0)');
-    ctx.fillStyle = mg; ctx.fillRect(0, h * 0.55, w, h * 0.45);
-    // Horizontal crack lines
+    // Green moss at bottom 25%
+    const mg = ctx.createLinearGradient(0, h, 0, h * 0.75);
+    mg.addColorStop(0, 'rgba(45,75,35,0.18)'); mg.addColorStop(1, 'rgba(45,75,35,0)');
+    ctx.fillStyle = mg; ctx.fillRect(0, h * 0.75, w, h * 0.25);
+    for (let i = 0; i < 100; i++) {
+        const r = 2 + rng() * 5;
+        ctx.fillStyle = `rgba(${40 + rng() * 30},${65 + rng() * 30},${30 + rng() * 20},${0.08 + rng() * 0.1})`;
+        ctx.beginPath(); ctx.arc(rng() * w, h * 0.78 + rng() * h * 0.22, r, 0, Math.PI * 2); ctx.fill();
+    }
+    // Patchy plaster blobs — exposed concrete
     for (let i = 0; i < 5; i++) {
-        const y = 60 + rng() * (h - 120);
-        ctx.strokeStyle = `rgba(120,110,100,${0.15 + rng() * 0.15})`;
-        ctx.lineWidth = 0.5 + rng();
-        ctx.beginPath(); ctx.moveTo(rng() * w * 0.3, y);
-        ctx.lineTo(rng() * w * 0.3 + w * 0.4, y + (rng() - 0.5) * 8);
+        ctx.fillStyle = `rgba(160,150,135,${0.1 + rng() * 0.05})`;
+        ctx.beginPath(); ctx.arc(rng() * w, rng() * h, 12 + rng() * 22, 0, Math.PI * 2); ctx.fill();
+    }
+    // Horizontal crack lines
+    for (let i = 0; i < 4; i++) {
+        const y = 40 + rng() * (h - 80);
+        ctx.strokeStyle = `rgba(100,90,80,${0.08 + rng() * 0.06})`;
+        ctx.lineWidth = 0.4 + rng() * 0.5;
+        ctx.beginPath();
+        let cx = rng() * w * 0.2;
+        ctx.moveTo(cx, y);
+        for (let s = 0; s < 4; s++) { cx += 30 + rng() * 60; ctx.lineTo(cx, y + (rng() - 0.5) * 6); }
         ctx.stroke();
     }
+    // Rust drip stains
+    for (let i = 0; i < 2; i++) {
+        const x = rng() * w, sw = 2 + rng() * 4;
+        const g = ctx.createLinearGradient(x, rng() * h * 0.3, x, h * 0.6 + rng() * h * 0.4);
+        g.addColorStop(0, `rgba(120,70,40,${0.05 + rng() * 0.03})`);
+        g.addColorStop(1, 'rgba(120,70,40,0)');
+        ctx.fillStyle = g; ctx.fillRect(x - sw / 2, 0, sw, h);
+    }
 });
-TEX.wall.repeat.set(1, 1.5);
+TEX.wall.repeat.set(1, 1);
 
-// Wall bump map
+// Wall bump map — plaster relief
 TEX.wallBump = makeTex(512, 512, (ctx, w, h) => {
     ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, w, h);
     const rng = tRand(99);
+    // Fine noise
     for (let i = 0; i < 6000; i++) {
         const v = 118 + rng() * 20;
         ctx.fillStyle = `rgb(${v},${v},${v})`;
         ctx.fillRect(rng() * w, rng() * h, 1 + rng() * 2, 1 + rng() * 2);
     }
     // Rough patches
-    for (let i = 0; i < 15; i++) {
-        ctx.fillStyle = `rgba(${100 + rng() * 50},${100 + rng() * 50},${100 + rng() * 50},0.3)`;
+    for (let i = 0; i < 10; i++) {
+        const v = 100 + rng() * 40;
+        ctx.fillStyle = `rgba(${v},${v},${v},0.15)`;
         ctx.beginPath();
-        ctx.arc(rng() * w, rng() * h, 8 + rng() * 25, 0, Math.PI * 2);
+        ctx.arc(rng() * w, rng() * h, 8 + rng() * 18, 0, Math.PI * 2);
         ctx.fill();
     }
+    // Crack indentations
+    for (let i = 0; i < 4; i++) {
+        const y = 40 + rng() * (h - 80);
+        ctx.strokeStyle = `rgb(${70 + rng() * 20},${70 + rng() * 20},${70 + rng() * 20})`;
+        ctx.lineWidth = 0.8 + rng() * 0.4;
+        ctx.beginPath();
+        let cx = rng() * w * 0.2;
+        ctx.moveTo(cx, y);
+        for (let s = 0; s < 4; s++) { cx += 30 + rng() * 60; ctx.lineTo(cx, y + (rng() - 0.5) * 6); }
+        ctx.stroke();
+    }
 });
-TEX.wallBump.repeat.set(1, 1.5);
+TEX.wallBump.repeat.set(1, 1);
 
-// Concrete texture
+// Concrete texture — weathered
 TEX.concrete = makeTex(256, 256, (ctx, w, h) => {
-    ctx.fillStyle = '#A8A090'; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#9C9484'; ctx.fillRect(0, 0, w, h);
     const rng = tRand(77);
+    // Grain noise
     for (let i = 0; i < 3000; i++) {
-        const v = 150 + rng() * 30;
+        const v = 140 + rng() * 35;
         ctx.fillStyle = `rgb(${v},${v - 4},${v - 8})`;
         ctx.fillRect(rng() * w, rng() * h, 1 + rng() * 4, 1 + rng() * 2);
     }
-    // Dark weathering spots
-    for (let i = 0; i < 20; i++) {
-        ctx.fillStyle = `rgba(60,55,50,${0.05 + rng() * 0.1})`;
-        ctx.beginPath(); ctx.arc(rng() * w, rng() * h, 5 + rng() * 15, 0, Math.PI * 2); ctx.fill();
+    // Dark blotchy patches
+    for (let i = 0; i < 12; i++) {
+        ctx.fillStyle = `rgba(50,48,42,${0.04 + rng() * 0.04})`;
+        ctx.beginPath(); ctx.arc(rng() * w, rng() * h, 5 + rng() * 14, 0, Math.PI * 2); ctx.fill();
+    }
+    // Green-black lichen spots
+    for (let i = 0; i < 5; i++) {
+        ctx.fillStyle = `rgba(35,55,30,${0.04 + rng() * 0.03})`;
+        ctx.beginPath(); ctx.arc(rng() * w, rng() * h, 3 + rng() * 8, 0, Math.PI * 2); ctx.fill();
+    }
+    // Hairline surface cracks
+    for (let i = 0; i < 8; i++) {
+        ctx.strokeStyle = `rgba(60,55,48,${0.05 + rng() * 0.05})`;
+        ctx.lineWidth = 0.3 + rng() * 0.4;
+        ctx.beginPath(); ctx.moveTo(rng() * w, rng() * h);
+        ctx.lineTo(rng() * w, rng() * h); ctx.stroke();
     }
 });
+TEX.concrete.repeat.set(2, 2);
 
-// Wood grain texture
+// Wood grain texture — aged tropical hardwood
 TEX.wood = makeTex(256, 512, (ctx, w, h) => {
-    ctx.fillStyle = '#5A3518'; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#4A2C14'; ctx.fillRect(0, 0, w, h);
     const rng = tRand(33);
-    // Grain lines (horizontal = along plank)
-    for (let y = 0; y < h; y += 2) {
-        const v = 70 + rng() * 30;
-        ctx.strokeStyle = `rgba(${v},${v * 0.6},${v * 0.3},${0.15 + rng() * 0.2})`;
-        ctx.lineWidth = 0.5 + rng() * 1.5;
-        ctx.beginPath(); ctx.moveTo(0, y + (rng() - 0.5) * 2);
-        ctx.lineTo(w, y + (rng() - 0.5) * 4); ctx.stroke();
+    // Grain lines every 1.8px
+    for (let y = 0; y < h; y += 1.8) {
+        const v = 65 + rng() * 30;
+        ctx.strokeStyle = `rgba(${v},${Math.floor(v * 0.5)},${Math.floor(v * 0.2)},${0.08 + rng() * 0.06})`;
+        ctx.lineWidth = 0.5 + rng() * 1;
+        ctx.beginPath(); ctx.moveTo(0, y + (rng() - 0.5) * 1.5);
+        ctx.lineTo(w, y + (rng() - 0.5) * 3); ctx.stroke();
     }
-    // Knots
-    for (let i = 0; i < 3; i++) {
+    // Knots (2)
+    for (let i = 0; i < 2; i++) {
         const kx = 30 + rng() * (w - 60), ky = 50 + rng() * (h - 100);
-        const kr = 6 + rng() * 10;
+        const kr = 6 + rng() * 8;
         for (let r = kr; r > 0; r -= 1.5) {
-            ctx.strokeStyle = `rgba(40,22,8,${0.1 + (kr - r) / kr * 0.3})`;
+            ctx.strokeStyle = `rgba(35,20,8,${0.08 + (kr - r) / kr * 0.18})`;
             ctx.lineWidth = 1; ctx.beginPath();
             ctx.ellipse(kx, ky, r, r * 0.7, rng() * 0.3, 0, Math.PI * 2); ctx.stroke();
         }
     }
+    // Horizontal aging bands
+    for (let i = 0; i < 5; i++) {
+        const y = rng() * h, bh = 10 + rng() * 25;
+        ctx.fillStyle = `rgba(25,18,8,${0.03 + rng() * 0.02})`;
+        ctx.fillRect(0, y, w, bh);
+    }
+    // Subtle green mold patches
+    for (let i = 0; i < 3; i++) {
+        ctx.fillStyle = `rgba(40,60,30,${0.02 + rng() * 0.02})`;
+        ctx.beginPath(); ctx.arc(rng() * w, rng() * h, 6 + rng() * 10, 0, Math.PI * 2); ctx.fill();
+    }
 });
+TEX.wood.repeat.set(1, 2);
 
-// Brick texture
+// Brick texture — laterite with light moss
 TEX.brick = makeTex(256, 256, (ctx, w, h) => {
-    const bw = 32, bh = 16, gap = 2;
-    ctx.fillStyle = '#806050'; ctx.fillRect(0, 0, w, h);
+    const bw = 32, bh = 16, gap = 3;
+    ctx.fillStyle = '#786858'; ctx.fillRect(0, 0, w, h);
     const rng = tRand(55);
     for (let row = 0; row < h / (bh + gap); row++) {
         const offset = (row % 2) * bw / 2;
         for (let col = -1; col < w / (bw + gap) + 1; col++) {
             const bx = col * (bw + gap) + offset, by = row * (bh + gap);
-            const r = 140 + rng() * 30, g = 50 + rng() * 20, b = 30 + rng() * 15;
+            const shade = rng();
+            const r = shade > 0.5 ? 155 + rng() * 30 : 120 + rng() * 25;
+            const g = 50 + rng() * 20, b = 30 + rng() * 15;
             ctx.fillStyle = `rgb(${r},${g},${b})`;
             ctx.fillRect(bx, by, bw, bh);
-            // Surface variation
             for (let i = 0; i < 8; i++) {
-                ctx.fillStyle = `rgba(${r + 20},${g + 10},${b + 5},0.3)`;
+                ctx.fillStyle = `rgba(${r + 15},${g + 8},${b + 5},0.2)`;
                 ctx.fillRect(bx + rng() * bw, by + rng() * bh, rng() * 8, rng() * 4);
             }
         }
+        // Light moss in mortar joints
+        const jy = row * (bh + gap) + bh;
+        for (let x = 0; x < w; x += 6 + rng() * 8) {
+            ctx.fillStyle = `rgba(50,80,40,${0.05 + rng() * 0.05})`;
+            ctx.fillRect(x, jy, 2 + rng() * 3, gap);
+        }
     }
+    // Bottom darkening gradient
+    const dg = ctx.createLinearGradient(0, h, 0, h * 0.6);
+    dg.addColorStop(0, 'rgba(40,50,35,0.08)'); dg.addColorStop(1, 'rgba(40,50,35,0)');
+    ctx.fillStyle = dg; ctx.fillRect(0, h * 0.6, w, h * 0.4);
 });
+TEX.brick.repeat.set(2, 2);
 
-// Red oxide floor
+// Red oxide floor — lightly worn platform
 TEX.redOxide = makeTex(256, 256, (ctx, w, h) => {
-    ctx.fillStyle = '#8B3828'; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#823024'; ctx.fillRect(0, 0, w, h);
     const rng = tRand(88);
-    for (let i = 0; i < 2000; i++) {
-        const v = rng() > 0.5 ? 150 + rng() * 20 : 120 + rng() * 20;
-        ctx.fillStyle = `rgba(${v},${v * 0.35},${v * 0.25},0.15)`;
-        ctx.fillRect(rng() * w, rng() * h, 2 + rng() * 5, 1 + rng() * 3);
+    // Noise flecks
+    for (let i = 0; i < 1500; i++) {
+        const v = rng() > 0.5 ? 145 + rng() * 20 : 110 + rng() * 20;
+        ctx.fillStyle = `rgba(${v},${Math.floor(v * 0.35)},${Math.floor(v * 0.22)},0.1)`;
+        ctx.fillRect(rng() * w, rng() * h, 2 + rng() * 4, 1 + rng() * 3);
     }
-    // Smooth polish reflections
-    for (let i = 0; i < 8; i++) {
-        const g = ctx.createRadialGradient(rng() * w, rng() * h, 0, rng() * w, rng() * h, 20 + rng() * 30);
-        g.addColorStop(0, 'rgba(180,80,60,0.08)'); g.addColorStop(1, 'rgba(180,80,60,0)');
+    // Wear paths — lighter horizontal bands
+    for (let i = 0; i < 2; i++) {
+        const y = rng() * h, bh = 12 + rng() * 20;
+        ctx.fillStyle = `rgba(160,80,55,${0.03 + rng() * 0.03})`;
+        ctx.fillRect(0, y, w, bh);
+    }
+    // Dirt in edges — darker corners
+    for (let i = 0; i < 2; i++) {
+        const cx = i < 1 ? rng() * 40 : w - rng() * 40;
+        const cy = i % 2 === 0 ? rng() * 40 : h - rng() * 40;
+        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 25 + rng() * 20);
+        g.addColorStop(0, 'rgba(40,18,10,0.06)'); g.addColorStop(1, 'rgba(40,18,10,0)');
         ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
     }
 });
+TEX.redOxide.repeat.set(2, 2);
 
 // Coconut bark (ring marks)
 TEX.bark = makeTex(128, 512, (ctx, w, h) => {
@@ -514,8 +597,8 @@ function updateMovement(delta) {
 scene.add(new THREE.AmbientLight(0x607060, 0.45));
 const sun = new THREE.DirectionalLight(0xFFF3E0, 1.0);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-Object.assign(sun.shadow.camera, { left: -80, right: 80, top: 80, bottom: -80, far: 180 });
+sun.shadow.mapSize.set(4096, 4096);
+Object.assign(sun.shadow.camera, { left: -50, right: 50, top: 50, bottom: -50, far: 150 });
 sun.shadow.bias = -0.001;
 scene.add(sun);
 scene.add(new THREE.DirectionalLight(0x8090A0, 0.15).translateX(-20).translateY(15).translateZ(-10));
@@ -567,34 +650,17 @@ function fbm(x, z, oct = 4) {
 // ============================================================
 function createKeralaHouse() {
 // ── Materials ──
-const whitePlaster = new THREE.MeshStandardMaterial({ color: 0xf5f0e8, roughness: 0.85 });
-const concrete = new THREE.MeshStandardMaterial({ color: 0xb0aaa0, roughness: 0.9 });
-const concreteDark = new THREE.MeshStandardMaterial({ color: 0x908880, roughness: 0.95 });
-const woodDoor = new THREE.MeshStandardMaterial({ color: 0x5c3a1e, roughness: 0.6, metalness: 0.05 });
-const woodWindow = new THREE.MeshStandardMaterial({ color: 0xb07030, roughness: 0.5, metalness: 0.05 });
+const whitePlaster = new THREE.MeshStandardMaterial({ color: 0xEAE5D8, roughness: 0.88, map: TEX.wall, bumpMap: TEX.wallBump, bumpScale: 0.08 });
+const concrete = new THREE.MeshStandardMaterial({ color: 0xA59F94, roughness: 0.92, map: TEX.concrete });
+const concreteDark = new THREE.MeshStandardMaterial({ color: 0x847C74, roughness: 0.95, map: TEX.concrete });
+const woodDoor = new THREE.MeshStandardMaterial({ color: 0x4B2D17, roughness: 0.68, metalness: 0.05, map: TEX.wood });
+const woodWindow = new THREE.MeshStandardMaterial({ color: 0x8D5828, roughness: 0.6, metalness: 0.05, map: TEX.wood });
 const glassMat = new THREE.MeshStandardMaterial({ color: 0xc8dce8, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.4 });
-const roofMat = new THREE.MeshStandardMaterial({ color: 0xe8e2d8, roughness: 0.7 });
-const frameMat = new THREE.MeshStandardMaterial({ color: 0x3a2010, roughness: 0.6 });
-const floorTile = new THREE.MeshStandardMaterial({ color: 0xc4a882, roughness: 0.7 });
+const roofMat = new THREE.MeshStandardMaterial({ color: 0xD0C9BC, roughness: 0.78, map: TEX.concrete });
+const frameMat = new THREE.MeshStandardMaterial({ color: 0x321C0C, roughness: 0.7, map: TEX.wood });
+const floorTile = new THREE.MeshStandardMaterial({ color: 0xB29878, roughness: 0.75, map: TEX.redOxide });
 const storageShadow = new THREE.MeshStandardMaterial({ color: 0x3a3530, roughness: 1.0 }); // dark recess
-
-// Brick texture
-const brickCanvas = document.createElement('canvas');
-brickCanvas.width = 256; brickCanvas.height = 256;
-const bCtx = brickCanvas.getContext('2d');
-bCtx.fillStyle = '#c45a3a';
-bCtx.fillRect(0, 0, 256, 256);
-for (let row = 0; row < 16; row++) {
-  for (let col = 0; col < 8; col++) {
-    const x = col * 32 + (row % 2 === 0 ? 0 : 16);
-    const y = row * 16;
-    bCtx.fillStyle = `rgb(${170+Math.random()*40},${70+Math.random()*30},${40+Math.random()*20})`;
-    bCtx.fillRect(x + 1, y + 1, 30, 14);
-  }
-}
-const brickTex = new THREE.CanvasTexture(brickCanvas);
-brickTex.wrapS = brickTex.wrapT = THREE.RepeatWrapping;
-const brickMat = new THREE.MeshStandardMaterial({ map: brickTex, roughness: 0.85 });
+const brickMat = new THREE.MeshStandardMaterial({ map: TEX.brick, roughness: 0.88 });
 
 // ── Helpers ──
 function box(w, h, d, mat) {
@@ -1292,49 +1358,56 @@ function terrainSlope(x, z) {
 // ============================================================
 const HOUSE_FLOOR = 1.5;
 
+// Shared terrace definitions — used by both terrain and walls
+// [radius, stepHeight] — narrower steps, more of them
+const RIGHT_TERRACES = [[12, 1.2], [17, 1.3], [22, 1.4], [27, 1.3], [32, 1.2], [37, 1.1]];
+const LEFT_TERRACES  = [[12, 1.2], [17, 1.3], [22, 1.4], [27, 1.3], [32, 1.2], [37, 1.1]];
+const TERRACE_Z_STRETCH = 3.5; // stronger elliptical curve
+
+// Staircase height: flat between walls, near-vertical step at each wall
+function staircaseHeight(dist, steps) {
+    let h = 0;
+    for (let i = 0; i < steps.length; i++) {
+        const [r, dh] = steps[i];
+        // Very steep: 0.4 unit transition (almost vertical)
+        h += smoothstep(r - 0.2, r + 0.2, dist) * dh;
+    }
+    return h;
+}
+
 function getTerrainY(x, z) {
-    // Base noise
+    // Very subtle organic noise (won't break flat terraces)
     const baseNoise =
-        Math.sin(x * 0.09) * 0.55 +
-        Math.cos(z * 0.12) * 0.38 +
-        Math.sin((x + z) * 0.08) * 0.45 +
-        Math.cos((x - z) * 0.06) * 0.35;
+        Math.sin(x * 0.09) * 0.15 +
+        Math.cos(z * 0.12) * 0.1 +
+        Math.sin((x + z) * 0.08) * 0.12;
+    let y = HOUSE_FLOOR + baseNoise * 0.2;
 
-    let y = baseNoise * 0.45;
-
-    // House plateau — flat clearing around the house
+    // House plateau — flat hilltop
     const housePlateau = clearingMask(x, z);
     y = lerp(y, HOUSE_FLOOR, housePlateau);
 
-    // Right side ascends — terraced slopes with smoothstep transitions
-    const rightTerraces =
-        smoothstep(10, 18, x) * 2.5 +
-        smoothstep(22, 32, x) * 2.0 +
-        smoothstep(36, 48, x) * 1.5;
-    y += rightTerraces;
+    // RIGHT SIDE (positive x): terraces going UP — sharp staircase
+    const rightDist = Math.hypot(Math.max(0, x), z / TERRACE_Z_STRETCH);
+    const rightMask = smoothstep(5, 12, x);
+    y += staircaseHeight(rightDist, RIGHT_TERRACES) * rightMask;
 
-    // Left side descends — gradual drop
-    const leftDrop =
-        smoothstep(18, 32, -x) * 2.2 +
-        smoothstep(34, 50, -x) * 1.8 +
-        smoothstep(52, 68, -x) * 1.2;
-    y -= leftDrop;
+    // LEFT SIDE (negative x): terraces going DOWN — sharp staircase
+    const leftDist = Math.hypot(Math.max(0, -x), z / TERRACE_Z_STRETCH);
+    const leftMask = smoothstep(5, 12, -x);
+    y -= staircaseHeight(leftDist, LEFT_TERRACES) * leftMask;
 
     // Front approach — gentle ramp down
-    const frontApron = 1 - smoothstep(5, 30, Math.hypot(x * 0.85, z + 12));
-    y = lerp(y, HOUSE_FLOOR - 0.3, frontApron * 0.6);
+    const frontDist = Math.max(0, z - 5);
+    y -= smoothstep(0, 30, frontDist) * 2.5;
 
-    // Downhill valley to the left-front
-    const downhillValley = smoothstep(24, 65, -x) * smoothstep(-20, 24, z + 8);
-    y -= downhillValley * 2.5;
+    // Back side — gentle rise
+    const backDist = Math.max(0, -z - 10);
+    y += smoothstep(0, 30, backDist) * 1.5;
 
-    // Ridge behind the house
-    const ridgeBack = smoothstep(16, 45, z) * 1.2;
-    y += ridgeBack;
-
-    // Organic fbm noise on top
-    y += (fbm(x * 0.04, z * 0.04) - 0.5) * 2.0;
-    y += (fbm(x * 0.1 + 50, z * 0.1 + 50) - 0.5) * 0.8;
+    // Fine fbm noise (very low amplitude to keep terraces flat)
+    y += (fbm(x * 0.04, z * 0.04) - 0.5) * 0.6;
+    y += (fbm(x * 0.1 + 50, z * 0.1 + 50) - 0.5) * 0.15;
 
     return y;
 }
@@ -1423,24 +1496,115 @@ function createTerrain() {
 }
 
 // ============================================================
-// SIDE CUT SLOPE (earth bank next to house, like reference photos)
+// CURVED TERRACE WALLS — smooth continuous arc retaining walls
 // ============================================================
-function createSideCutSlope() {
+function createTerraceWalls() {
     const g = new THREE.Group();
-    const earthMat = new THREE.MeshStandardMaterial({ color: 0x775032, roughness: 1 });
-    const topMat = new THREE.MeshStandardMaterial({ color: 0x6b8b45, roughness: 1 });
-    // Earth bank on the right side — steep cut into hillside
-    const bankX = 18, bankZ = 0;
-    const bankY = getTerrainY(bankX, bankZ);
-    const bank = new THREE.Mesh(new THREE.BoxGeometry(14, 4.5, 28), earthMat);
-    bank.position.set(bankX + 7, bankY + 1.5, bankZ);
-    bank.castShadow = true; bank.receiveShadow = true;
-    g.add(bank);
-    // Green grass cap on top
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(14.5, 0.25, 28.5), topMat);
-    cap.position.set(bankX + 7, bankY + 3.8, bankZ);
-    cap.receiveShadow = true;
-    g.add(cap);
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x6B5A48, roughness: 0.95, side: THREE.DoubleSide });
+    const mossMat = new THREE.MeshStandardMaterial({ color: 0x4A6B38, roughness: 0.9 });
+
+    // Build a smooth curved wall as custom BufferGeometry
+    // side: 1 = right (uphill outward), -1 = left (downhill outward)
+    function addTerraceWall(radius, side, wallHeight, zStretch) {
+        const segs = 64;
+        const arcAngle = Math.PI * 1.1; // wider arc — more curved
+        const startAngle = -arcAngle / 2;
+        const thickness = 0.3; // thinner = steeper face
+
+        // Sample terrain just inside (downhill) and just outside (uphill) the wall
+        // to get the two terrace levels this wall connects
+        const verts = [], normals = [], indices = [];
+        for (let i = 0; i <= segs; i++) {
+            const a = startAngle + (i / segs) * arcAngle;
+            const cosA = Math.cos(a), sinA = Math.sin(a);
+            const nx = cosA * side, nz = sinA;
+
+            // Sample point on arc center
+            const cx = side * cosA * radius;
+            const cz = sinA * radius * zStretch;
+            // Offset inward (toward house) to get lower terrace level
+            const inX = side * cosA * (radius - 1.5);
+            const inZ = sinA * (radius - 1.5) * zStretch;
+            // Offset outward to get upper terrace level
+            const outX = side * cosA * (radius + 1.5);
+            const outZ = sinA * (radius + 1.5) * zStretch;
+
+            const lowerY = getTerrainY(inX, inZ);  // downhill side
+            const upperY = getTerrainY(outX, outZ); // uphill side
+
+            for (let ring = 0; ring < 2; ring++) { // 0=inner(downhill), 1=outer(uphill)
+                const r = radius + (ring - 0.5) * thickness;
+                const px = side * cosA * r;
+                const pz = sinA * r * zStretch;
+
+                for (let row = 0; row < 2; row++) { // 0=bottom, 1=top
+                    let py;
+                    if (row === 0) {
+                        // Bottom: sits at lower terrace level, slightly embedded
+                        py = lowerY - 0.15;
+                    } else {
+                        // Top: matches the upper terrace level exactly
+                        py = upperY;
+                    }
+                    verts.push(px, py, pz);
+                    normals.push(ring === 1 ? nx : -nx, 0, ring === 1 ? nz : -nz);
+                }
+            }
+        }
+
+        // Indices: 4 verts per column: inner-bot(0), inner-top(1), outer-bot(2), outer-top(3)
+        for (let i = 0; i < segs; i++) {
+            const c0 = i * 4, c1 = (i + 1) * 4;
+            // Outer face
+            indices.push(c0 + 2, c1 + 2, c1 + 3, c0 + 2, c1 + 3, c0 + 3);
+            // Inner face (reversed winding)
+            indices.push(c0 + 0, c1 + 1, c1 + 0, c0 + 0, c0 + 1, c1 + 1);
+            // Top face
+            indices.push(c0 + 1, c0 + 3, c1 + 3, c0 + 1, c1 + 3, c1 + 1);
+        }
+
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+        geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+        geo.setIndex(indices);
+        geo.computeVertexNormals();
+
+        const wall = new THREE.Mesh(geo, wallMat);
+        wall.castShadow = true; wall.receiveShadow = true;
+        g.add(wall);
+
+        // Moss line on top — thin curved strip at upper terrace level
+        const mossVerts = [], mossIdx = [];
+        for (let i = 0; i <= segs; i++) {
+            const a = startAngle + (i / segs) * arcAngle;
+            const cosA = Math.cos(a), sinA = Math.sin(a);
+            const px = side * cosA * radius;
+            const pz = sinA * radius * zStretch;
+            const outX = side * cosA * (radius + 1.5);
+            const outZ = sinA * (radius + 1.5) * zStretch;
+            const topY = getTerrainY(outX, outZ) + 0.04;
+            mossVerts.push(
+                px - cosA * side * 0.3, topY, pz - sinA * 0.3,
+                px + cosA * side * 0.3, topY + 0.06, pz + sinA * 0.3
+            );
+            if (i < segs) {
+                const v = i * 2;
+                mossIdx.push(v, v + 2, v + 3, v, v + 3, v + 1);
+            }
+        }
+        const mossGeo = new THREE.BufferGeometry();
+        mossGeo.setAttribute('position', new THREE.Float32BufferAttribute(mossVerts, 3));
+        mossGeo.setIndex(mossIdx);
+        mossGeo.computeVertexNormals();
+        const moss = new THREE.Mesh(mossGeo, mossMat);
+        moss.receiveShadow = true;
+        g.add(moss);
+    }
+
+    // Generate walls from shared terrace definitions
+    RIGHT_TERRACES.forEach(([r, h]) => addTerraceWall(r, 1, h, TERRACE_Z_STRETCH));
+    LEFT_TERRACES.forEach(([r, h]) => addTerraceWall(r, -1, h, TERRACE_Z_STRETCH));
+
     return g;
 }
 
@@ -1617,16 +1781,22 @@ const objLoader = new OBJLoader();
 const sceneObjects = {};
 function regObj(id, obj) { sceneObjects[id] = obj; applyLayout(id); }
 
-// Apply saved layout from editor (via localStorage)
+// Default scene layout (exported from editor)
+const defaultLayout = {"house":{"position":{"x":0,"y":0.31,"z":0},"scale":{"x":1,"y":1,"z":1},"rotation":{"y":0}},"well":{"position":{"x":-3,"y":1.14,"z":-19},"scale":{"x":0.45,"y":0.45,"z":0.45},"rotation":{"y":0}},"banana_0":{"position":{"x":-8,"y":1.14,"z":-6},"scale":{"x":1.5,"y":1.5,"z":1.5},"rotation":{"y":0.577}},"banana_1":{"position":{"x":7,"y":0.96,"z":-14},"scale":{"x":1.5,"y":1.5,"z":1.5},"rotation":{"y":3.637}},"banana_2":{"position":{"x":-12,"y":1.08,"z":2},"scale":{"x":1.5,"y":1.5,"z":1.5},"rotation":{"y":0.917}},"banana_3":{"position":{"x":5,"y":0.82,"z":-8},"scale":{"x":1.5,"y":1.5,"z":1.5},"rotation":{"y":4.13}},"banana_4":{"position":{"x":-4,"y":1.09,"z":-15},"scale":{"x":1.5,"y":1.5,"z":1.5},"rotation":{"y":4.857}},"banana_5":{"position":{"x":10,"y":0.84,"z":-5},"scale":{"x":1.5,"y":1.5,"z":1.5},"rotation":{"y":4.199}},"mango_0":{"position":{"x":-5,"y":0.98,"z":-20},"scale":{"x":0.0471,"y":0.0471,"z":0.0471},"rotation":{"y":1.765}},"mango_1":{"position":{"x":5,"y":0.89,"z":-22},"scale":{"x":0.0448,"y":0.0448,"z":0.0448},"rotation":{"y":3.121}},"mango_2":{"position":{"x":-10,"y":0.37,"z":-25},"scale":{"x":0.0445,"y":0.0445,"z":0.0445},"rotation":{"y":2.966}},"mango_3":{"position":{"x":8,"y":0.35,"z":-28},"scale":{"x":0.0404,"y":0.0404,"z":0.0404},"rotation":{"y":5.867}},"mango_4":{"position":{"x":-3,"y":0.12,"z":-30},"scale":{"x":0.0503,"y":0.0503,"z":0.0503},"rotation":{"y":1.528}},"mango_5":{"position":{"x":12,"y":0.65,"z":-24},"scale":{"x":0.0505,"y":0.0505,"z":0.0505},"rotation":{"y":0.896}},"mango_6":{"position":{"x":-15,"y":0.88,"z":-22},"scale":{"x":0.0439,"y":0.0439,"z":0.0439},"rotation":{"y":4.741}},"mango_7":{"position":{"x":0,"y":-0.22,"z":-35},"scale":{"x":0.0416,"y":0.0416,"z":0.0416},"rotation":{"y":1.504}},"mango_8":{"position":{"x":-18,"y":1.33,"z":-5},"scale":{"x":0.0477,"y":0.0477,"z":0.0477},"rotation":{"y":3.618}},"mango_9":{"position":{"x":-22,"y":0.55,"z":2},"scale":{"x":0.049,"y":0.049,"z":0.049},"rotation":{"y":2.391}},"mango_10":{"position":{"x":-25,"y":-0.26,"z":-10},"scale":{"x":0.0442,"y":0.0442,"z":0.0442},"rotation":{"y":5.585}},"mango_11":{"position":{"x":-20,"y":1.01,"z":8},"scale":{"x":0.0439,"y":0.0439,"z":0.0439},"rotation":{"y":1.726}},"mango_12":{"position":{"x":-28,"y":-1.16,"z":-3},"scale":{"x":0.0506,"y":0.0506,"z":0.0506},"rotation":{"y":5.882}},"mango_13":{"position":{"x":20,"y":2.79,"z":-8},"scale":{"x":0.0511,"y":0.0511,"z":0.0511},"rotation":{"y":1.973}},"mango_14":{"position":{"x":24,"y":3.51,"z":-3},"scale":{"x":0.0419,"y":0.0419,"z":0.0419},"rotation":{"y":2.057}},"mango_15":{"position":{"x":28,"y":4.17,"z":-10},"scale":{"x":0.0446,"y":0.0446,"z":0.0446},"rotation":{"y":1.942}},"mango_16":{"position":{"x":22,"y":3.54,"z":5},"scale":{"x":0.0421,"y":0.0421,"z":0.0421},"rotation":{"y":3.832}},"mango_17":{"position":{"x":30,"y":4.89,"z":-6},"scale":{"x":0.0499,"y":0.0499,"z":0.0499},"rotation":{"y":4.796}},"mango_18":{"position":{"x":-8,"y":1.11,"z":8},"scale":{"x":0.0493,"y":0.0493,"z":0.0493},"rotation":{"y":3.265}},"mango_19":{"position":{"x":6,"y":0.88,"z":6},"scale":{"x":0.0431,"y":0.0431,"z":0.0431},"rotation":{"y":0.811}},"mango_20":{"position":{"x":-12,"y":1.54,"z":-15},"scale":{"x":0.041,"y":0.041,"z":0.041},"rotation":{"y":5.568}},"mango_21":{"position":{"x":15,"y":2.13,"z":-14},"scale":{"x":0.0444,"y":0.0444,"z":0.0444},"rotation":{"y":5.804}},"mango_22":{"position":{"x":-6,"y":0.22,"z":-28},"scale":{"x":0.0478,"y":0.0478,"z":0.0478},"rotation":{"y":5.627}},"rock":{"position":{"x":8.15,"y":-0.37,"z":21.25},"scale":{"x":0.0593,"y":0.0461,"z":0.1153},"rotation":{"y":0.4}},"coconut_0":{"position":{"x":-9,"y":1.47,"z":-12},"scale":{"x":0.0111,"y":0.0111,"z":0.0111},"rotation":{"y":1.146}},"coconut_1":{"position":{"x":10,"y":0.99,"z":-10},"scale":{"x":0.013,"y":0.013,"z":0.013},"rotation":{"y":2.514}},"coconut_2":{"position":{"x":-16,"y":1.33,"z":4},"scale":{"x":0.0124,"y":0.0124,"z":0.0124},"rotation":{"y":1.361}},"coconut_3":{"position":{"x":18,"y":3.33,"z":8},"scale":{"x":0.0121,"y":0.0121,"z":0.0121},"rotation":{"y":3.828}},"coconut_4":{"position":{"x":-22,"y":0.68,"z":-15},"scale":{"x":0.0131,"y":0.0131,"z":0.0131},"rotation":{"y":0.943}},"coconut_5":{"position":{"x":25,"y":3.53,"z":-6},"scale":{"x":0.0133,"y":0.0133,"z":0.0133},"rotation":{"y":4.45}},"coconut_6":{"position":{"x":-12,"y":0.53,"z":18},"scale":{"x":0.0115,"y":0.0115,"z":0.0115},"rotation":{"y":1.727}},"coconut_7":{"position":{"x":30,"y":5.06,"z":4},"scale":{"x":0.0128,"y":0.0128,"z":0.0128},"rotation":{"y":5.026}},"coconut_8":{"position":{"x":-32,"y":-2.07,"z":2},"scale":{"x":0.013,"y":0.013,"z":0.013},"rotation":{"y":3.417}},"coconut_9":{"position":{"x":36,"y":4.74,"z":-8},"scale":{"x":0.0127,"y":0.0127,"z":0.0127},"rotation":{"y":1.507}},"coconut_10":{"position":{"x":5,"y":0.73,"z":25},"scale":{"x":0.012,"y":0.012,"z":0.012},"rotation":{"y":1.088}},"coconut_11":{"position":{"x":-6,"y":0.84,"z":-22},"scale":{"x":0.0114,"y":0.0114,"z":0.0114},"rotation":{"y":0.417}},"coconut_12":{"position":{"x":14,"y":1.56,"z":-18},"scale":{"x":0.0129,"y":0.0129,"z":0.0129},"rotation":{"y":1.594}},"coconut_13":{"position":{"x":-18,"y":1.28,"z":-8},"scale":{"x":0.0122,"y":0.0122,"z":0.0122},"rotation":{"y":2.59}},"coconut_14":{"position":{"x":8,"y":0.63,"z":-25},"scale":{"x":0.0119,"y":0.0119,"z":0.0119},"rotation":{"y":3.819}},"coconut_15":{"position":{"x":-28,"y":-1.14,"z":-5},"scale":{"x":0.0111,"y":0.0111,"z":0.0111},"rotation":{"y":1.867}},"coconut_16":{"position":{"x":22,"y":3,"z":15},"scale":{"x":0.0112,"y":0.0112,"z":0.0112},"rotation":{"y":1.526}},"coconut_17":{"position":{"x":-8,"y":0.36,"z":28},"scale":{"x":0.014,"y":0.014,"z":0.014},"rotation":{"y":5.821}},"coconut_18":{"position":{"x":40,"y":5.17,"z":2},"scale":{"x":0.0116,"y":0.0116,"z":0.0116},"rotation":{"y":2.822}},"coconut_19":{"position":{"x":-38,"y":-2.72,"z":-10},"scale":{"x":0.0138,"y":0.0138,"z":0.0138},"rotation":{"y":4.199}},"coconut_20":{"position":{"x":-5,"y":1.04,"z":-18},"scale":{"x":0.0136,"y":0.0136,"z":0.0136},"rotation":{"y":4.197}},"coconut_21":{"position":{"x":3,"y":1,"z":-20},"scale":{"x":0.0135,"y":0.0135,"z":0.0135},"rotation":{"y":2.284}},"coconut_22":{"position":{"x":-14,"y":1.42,"z":-6},"scale":{"x":0.0105,"y":0.0105,"z":0.0105},"rotation":{"y":2.945}},"coconut_23":{"position":{"x":16,"y":2.33,"z":-4},"scale":{"x":0.0119,"y":0.0119,"z":0.0119},"rotation":{"y":5.094}},"coconut_24":{"position":{"x":-20,"y":0.82,"z":10},"scale":{"x":0.0121,"y":0.0121,"z":0.0121},"rotation":{"y":1.213}},"coconut_25":{"position":{"x":28,"y":4.09,"z":-12},"scale":{"x":0.0138,"y":0.0138,"z":0.0138},"rotation":{"y":2.866}},"coconut_26":{"position":{"x":-25,"y":-0.74,"z":-22},"scale":{"x":0.0114,"y":0.0114,"z":0.0114},"rotation":{"y":3.47}},"coconut_27":{"position":{"x":35,"y":4.65,"z":10},"scale":{"x":0.0106,"y":0.0106,"z":0.0106},"rotation":{"y":4.537}},"coconut_28":{"position":{"x":-30,"y":-1.95,"z":8},"scale":{"x":0.011,"y":0.011,"z":0.011},"rotation":{"y":0.935}},"coconut_29":{"position":{"x":20,"y":2.41,"z":-20},"scale":{"x":0.013,"y":0.013,"z":0.013},"rotation":{"y":4.748}},"coconut_30":{"position":{"x":-10,"y":-0.18,"z":-30},"scale":{"x":0.0123,"y":0.0123,"z":0.0123},"rotation":{"y":5.536}},"coconut_31":{"position":{"x":8,"y":0.01,"z":-32},"scale":{"x":0.014,"y":0.014,"z":0.014},"rotation":{"y":1.209}},"coconut_32":{"position":{"x":-18,"y":0.56,"z":14},"scale":{"x":0.0111,"y":0.0111,"z":0.0111},"rotation":{"y":2.552}},"coconut_33":{"position":{"x":32,"y":4.54,"z":-18},"scale":{"x":0.0132,"y":0.0132,"z":0.0132},"rotation":{"y":5.351}},"coconut_34":{"position":{"x":-35,"y":-2.49,"z":-8},"scale":{"x":0.0135,"y":0.0135,"z":0.0135},"rotation":{"y":0.155}},"coconut_35":{"position":{"x":42,"y":5.64,"z":-4},"scale":{"x":0.0132,"y":0.0132,"z":0.0132},"rotation":{"y":3.601}},"coconut_36":{"position":{"x":-40,"y":-3.48,"z":5},"scale":{"x":0.0118,"y":0.0118,"z":0.0118},"rotation":{"y":1.556}},"coconut_37":{"position":{"x":15,"y":2.18,"z":22},"scale":{"x":0.0131,"y":0.0131,"z":0.0131},"rotation":{"y":0.509}},"coconut_38":{"position":{"x":-8,"y":-0.33,"z":-35},"scale":{"x":0.011,"y":0.011,"z":0.011},"rotation":{"y":4.766}},"coconut_39":{"position":{"x":25,"y":3.05,"z":18},"scale":{"x":0.0107,"y":0.0107,"z":0.0107},"rotation":{"y":1.414}}};
+
+// Apply saved layout from editor (via localStorage), falling back to default
 const savedLayout = (() => {
-    try { return JSON.parse(localStorage.getItem('sceneLayout')); } catch { return null; }
+    try { const ls = JSON.parse(localStorage.getItem('sceneLayout')); return ls || defaultLayout; } catch { return defaultLayout; }
 })();
 
 function applyLayout(id) {
     if (!savedLayout || !savedLayout[id]) return;
     const o = sceneObjects[id], l = savedLayout[id];
     if (!o) return;
-    o.position.set(l.position.x, l.position.y, l.position.z);
+    // Trees and plants: snap Y to terrain instead of using stored Y
+    const snapToGround = id.startsWith('coconut_') || id.startsWith('mango_') || id.startsWith('banana_') || id === 'well' || id === 'rock';
+    const py = snapToGround ? getTerrainY(l.position.x, l.position.z) : l.position.y;
+    o.position.set(l.position.x, py, l.position.z);
     o.scale.set(l.scale.x, l.scale.y, l.scale.z);
     o.rotation.y = l.rotation.y;
 }
@@ -1687,7 +1857,7 @@ function getTerrainDelta(x, z) {
 
 // Connect terrain delta sampler to walkable height
 _terrainDeltaFn = getTerrainDelta;
-scene.add(createSideCutSlope());
+scene.add(createTerraceWalls());
 scene.add(createGrassSystem());
 
 // Well (scaled down to realistic proportions)
